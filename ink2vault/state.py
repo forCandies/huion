@@ -83,3 +83,13 @@ class State:
     def recent(self, limit: int = 20):
         with self.connect() as conn:
             return conn.execute("SELECT * FROM pages ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+
+    def reset_errors(self) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute("DELETE FROM pages WHERE status IN ('error','processing')")
+            return cursor.rowcount
+
+    def reset_all(self) -> int:
+        with self.connect() as conn:
+            cursor = conn.execute("DELETE FROM pages")
+            return cursor.rowcount

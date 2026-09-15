@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .ai import claude_version
-from .config import APP_SUPPORT, CONFIG_PATH, LOG_PATH, PLIST_PATH, STATE_PATH, Config, suggested_source, suggested_vault_root
+from .config import APP_SUPPORT, CONFIG_PATH, LEGACY_PLIST_PATH, LOG_PATH, PLIST_PATH, STATE_PATH, Config, suggested_source, suggested_vault_root
 from .pipeline import Pipeline
 from .state import State
 
 
-LOG = logging.getLogger("ink2vault")
+LOG = logging.getLogger("huion")
 
 
 def configure_logging(verbose: bool = False, log_file: bool = False) -> None:
@@ -46,7 +46,7 @@ def cmd_configure(args: argparse.Namespace) -> int:
     source_default = args.source or (previous.source_dir if previous else str(suggested_source()))
     vault_root = suggested_vault_root()
     vault_default = args.vault or (previous.vault_dir if previous else str(vault_root))
-    source = source_default if args.non_interactive else ask("Složka se zálohami", source_default)
+    source = source_default if args.non_interactive else ask("Zdrojová složka Huion", source_default)
     vault = vault_default if args.non_interactive else ask("Obsidian vault v iCloud Drive", vault_default)
     note_folder = args.notes or (previous.note_folder if previous else "Inbox/Rukopis")
     attachment_folder = args.attachments or (previous.attachment_folder if previous else "Attachments/Rukopis")
@@ -110,9 +110,15 @@ def create_pipeline() -> Pipeline:
     return Pipeline(Config.load(), State(STATE_PATH))
 
 
-def cmd_scan(args: argparse.Namespace) -> int:
-    count = create_pipeline().scan(retry_errors=args.retry_errors or args.retry_now, retry_now=args.retry_now)
+def cmd_import(args: argparse.Namespace) -> int:
+    count = create_pipeline().scan(retry_errors=args.retry_errors, retry_now=args.retry_now)
     print("Hotovo. Nově vytvořených poznámek: %s" % count)
+    return 0
+
+
+def cmd_retry(_: argparse.Namespace) -> int:
+    count = create_pipeline().scan(retry_errors=True, retry_now=True)
+    print("Hotovo. Po opakování vytvořených poznámek: %s" % count)
     return 0
 
 
@@ -141,20 +147,40 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reset(args: argparse.Namespace) -> int:
+    state = State(STATE_PATH)
+    if args.scope == "errors":
+        removed = state.reset_errors()
+        print("Resetováno chybných nebo přerušených importů: %s" % removed)
+        return 0
+    if not args.yes:
+        print("Poznámky v Obsidianu zůstanou zachované.")
+        print("Další import vytvoří nové kopie všech nalezených stránek.")
+        answer = input("Pro úplný reset napiš RESET: ").strip()
+        if answer != "RESET":
+            print("Reset zrušen.")
+            return 1
+    removed = state.reset_all()
+    print("Importní historie byla vymazána. Záznamů: %s" % removed)
+    return 0
+
+
 def module_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
 def cmd_service(args: argparse.Namespace) -> int:
+    label = "cz.huion.watch"
     if args.action == "status":
-        result = subprocess.run(["launchctl", "print", "gui/%s/cz.ink2vault.watch" % os.getuid()], capture_output=True, text=True)
+        result = subprocess.run(["launchctl", "print", "gui/%s/%s" % (os.getuid(), label)], capture_output=True, text=True)
         print("Služba běží." if result.returncode == 0 else "Služba není načtená.")
         return result.returncode
     domain = "gui/%s" % os.getuid()
-    label = "cz.ink2vault.watch"
     if args.action == "uninstall":
         subprocess.run(["launchctl", "bootout", domain, str(PLIST_PATH)], check=False)
+        subprocess.run(["launchctl", "bootout", domain, str(LEGACY_PLIST_PATH)], check=False)
         PLIST_PATH.unlink(missing_ok=True)
+        LEGACY_PLIST_PATH.unlink(missing_ok=True)
         print("Služba byla odstraněna.")
         return 0
     config = Config.load()
@@ -185,6 +211,8 @@ def cmd_service(args: argparse.Namespace) -> int:
     }
     with PLIST_PATH.open("wb") as handle:
         plistlib.dump(payload, handle)
+    subprocess.run(["launchctl", "bootout", domain, str(LEGACY_PLIST_PATH)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    LEGACY_PLIST_PATH.unlink(missing_ok=True)
     subprocess.run(["launchctl", "bootout", domain, str(PLIST_PATH)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["launchctl", "bootstrap", domain, str(PLIST_PATH)], check=True)
     print("Služba nainstalována. Sleduje %s každých %s sekund." % (config.source, config.interval_seconds))
@@ -192,9 +220,9 @@ def cmd_service(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(prog="ink2vault", description="Rukopisné poznámky z lokální zálohy do Obsidianu v iCloud Drive")
+    result = argparse.ArgumentParser(prog="huion", description="Poznámky z Huion Note přes Claude do Obsidianu")
     result.add_argument("--verbose", action="store_true")
-    sub = result.add_subparsers(dest="command", required=True)
+    sub = result.add_subparsers(dest="command")
     configure = sub.add_parser("configure", help="Nastavit vstupní složku a Obsidian vault")
     configure.add_argument("--source")
     configure.add_argument("--vault")
@@ -206,25 +234,69 @@ def parser() -> argparse.ArgumentParser:
     configure.set_defaults(func=cmd_configure)
     doctor = sub.add_parser("doctor", help="Ověřit složky a přihlášení Claude")
     doctor.set_defaults(func=cmd_doctor)
-    scan = sub.add_parser("scan", help="Jednou zpracovat nové stránky")
-    scan.add_argument("--retry-errors", action="store_true")
-    scan.add_argument("--retry-now", action="store_true")
-    scan.set_defaults(func=cmd_scan)
+    import_command = sub.add_parser("import", aliases=["scan"], help="Importovat existující i nové stránky")
+    import_command.add_argument("--retry-errors", action="store_true", help="Zopakovat také dříve chybné stránky")
+    import_command.add_argument("--retry-now", action="store_true", help=argparse.SUPPRESS)
+    import_command.set_defaults(func=cmd_import)
+    retry = sub.add_parser("retry", help="Hned zopakovat všechny chybné importy")
+    retry.set_defaults(func=cmd_retry)
     watch = sub.add_parser("watch", help="Průběžně sledovat vstupní složku")
     watch.add_argument("--interval", type=int)
     watch.set_defaults(func=cmd_watch)
     status = sub.add_parser("status", help="Vypsat stav a poslední importy")
     status.add_argument("--limit", type=int, default=20)
     status.set_defaults(func=cmd_status)
+    reset = sub.add_parser("reset", help="Resetovat chyby nebo celou importní historii")
+    reset.add_argument("scope", choices=["errors", "all"], nargs="?", default="errors")
+    reset.add_argument("--yes", action="store_true", help="U úplného resetu nevyžadovat potvrzení")
+    reset.set_defaults(func=cmd_reset)
     service = sub.add_parser("service", help="Spravovat automatické spouštění přes launchd")
     service.add_argument("action", choices=["install", "uninstall", "status"])
     service.set_defaults(func=cmd_service)
     return result
 
 
+def interactive_menu() -> int:
+    actions = {
+        "1": ("Importovat vše, co je v iCloudu", cmd_import, argparse.Namespace(retry_errors=False, retry_now=False)),
+        "2": ("Zopakovat chybné importy", cmd_retry, argparse.Namespace()),
+        "3": ("Zobrazit stav", cmd_status, argparse.Namespace(limit=20)),
+        "4": ("Nastavit zdroj a Obsidian", cmd_configure, argparse.Namespace(
+            source=None, vault=None, notes=None, attachments=None, model=None, interval=None, non_interactive=False,
+        )),
+        "5": ("Spustit kontrolu nastavení", cmd_doctor, argparse.Namespace()),
+        "6": ("Zapnout automatickou službu", cmd_service, argparse.Namespace(action="install")),
+        "7": ("Zobrazit stav služby", cmd_service, argparse.Namespace(action="status")),
+        "8": ("Vypnout automatickou službu", cmd_service, argparse.Namespace(action="uninstall")),
+        "9": ("Resetovat chybné importy", cmd_reset, argparse.Namespace(scope="errors", yes=True)),
+        "10": ("Resetovat celou importní historii", cmd_reset, argparse.Namespace(scope="all", yes=False)),
+    }
+    while True:
+        print("\nHuion\n=====")
+        for key, (label, _, __) in actions.items():
+            print("%2s) %s" % (key, label))
+        print(" 0) Konec")
+        try:
+            choice = input("\nVyber akci: ").strip()
+        except EOFError:
+            return 0
+        if choice == "0":
+            return 0
+        action = actions.get(choice)
+        if not action:
+            print("Neplatná volba.")
+            continue
+        try:
+            action[1](action[2])
+        except Exception as exc:
+            LOG.error("%s", exc)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser().parse_args(argv)
     configure_logging(args.verbose, args.command == "watch")
+    if args.command is None:
+        return interactive_menu()
     try:
         return int(args.func(args))
     except KeyboardInterrupt:

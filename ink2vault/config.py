@@ -6,11 +6,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-APP_SUPPORT = Path(os.getenv("INK2VAULT_HOME", str(Path.home() / "Library" / "Application Support" / "Ink2Vault"))).expanduser()
+APP_SUPPORT = Path(os.getenv("HUION_HOME", os.getenv("INK2VAULT_HOME", str(Path.home() / "Library" / "Application Support" / "Huion")))).expanduser()
 CONFIG_PATH = APP_SUPPORT / "config.json"
 STATE_PATH = APP_SUPPORT / "state.sqlite3"
-LOG_PATH = APP_SUPPORT / "ink2vault.log"
-PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "cz.ink2vault.watch.plist"
+LOG_PATH = APP_SUPPORT / "huion.log"
+PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "cz.huion.watch.plist"
+LEGACY_PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "cz.ink2vault.watch.plist"
 
 
 @dataclass
@@ -28,7 +29,7 @@ class Config:
     @classmethod
     def load(cls) -> "Config":
         if not CONFIG_PATH.exists():
-            raise RuntimeError("Konfigurace neexistuje. Nejdřív spusť: ink2vault configure")
+            raise RuntimeError("Konfigurace neexistuje. Nejdřív spusť: huion configure")
         return cls(**json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
 
     def save(self) -> None:

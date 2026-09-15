@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ink2vault.ai import AIResult, process_image
+from ink2vault.cli import main, parser
 from ink2vault.config import Config
 from ink2vault.huion import Page, read_backup, read_notebook
 from ink2vault.pipeline import Pipeline, find_sources, markdown
@@ -40,6 +41,14 @@ def make_live_notebook(path: Path, image: bytes = JPEG) -> None:
 
 
 class LocalPipelineTests(unittest.TestCase):
+    def test_cli_without_arguments_opens_menu(self):
+        with patch("builtins.input", return_value="0"):
+            self.assertEqual(main([]), 0)
+
+    def test_cli_import_command_is_available(self):
+        args = parser().parse_args(["import"])
+        self.assertEqual(args.command, "import")
+
     def test_claude_structured_output_is_parsed(self):
         response = {
             "structured_output": {
@@ -141,6 +150,27 @@ class LocalPipelineTests(unittest.TestCase):
                 self.assertEqual(Pipeline(config, state).scan(), 0)
             ai.assert_not_called()
             self.assertEqual(state.get(source_id)["status"], "done")
+
+    def test_state_resets_errors_without_forgetting_done_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = State(Path(directory) / "state.sqlite3")
+            state.begin("done", "a", "Sešit", 1, "hash-a")
+            state.done("done", "note.md")
+            state.begin("error", "b", "Sešit", 2, "hash-b")
+            state.fail("error", "chyba")
+
+            self.assertEqual(state.reset_errors(), 1)
+            self.assertIsNotNone(state.get("done"))
+            self.assertIsNone(state.get("error"))
+
+    def test_state_reset_all_forgets_every_page(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = State(Path(directory) / "state.sqlite3")
+            state.begin("page", "a", "Sešit", 1, "hash")
+            state.done("page", "note.md")
+
+            self.assertEqual(state.reset_all(), 1)
+            self.assertIsNone(state.get("page"))
 
 
 if __name__ == "__main__":

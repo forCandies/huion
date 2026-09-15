@@ -3,13 +3,13 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ink2vault"
-version = "0.1.0"
+name = "huion"
+version = "0.2.0"
 description = "Convert local Huion note backups into AI-enriched Obsidian notes"
 requires-python = ">=3.9"
 
 [project.scripts]
-ink2vault = "ink2vault.cli:main"
+huion = "ink2vault.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["ink2vault*"]

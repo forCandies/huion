@@ -1,14 +1,14 @@
-# Ink2Vault
+# Huion
 
-Ink2Vault je malá lokální aplikace pro macOS. Čte sešity synchronizované aplikací Huion Note přes iCloud, každou novou stránku nechá přečíst Claudem a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
+Huion je malá lokální aplikace pro macOS. Čte sešity synchronizované aplikací Huion Note přes iCloud, každou novou stránku nechá přečíst Claudem a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
 
 ```text
-Huion Note na iPhonu/iPadu → iCloud → Huion Note na Macu → Ink2Vault + Claude
-                                                               ↓
+Huion Note na iPhonu/iPadu → iCloud → Huion + Claude na Macu
+                                             ↓
 iPhone / iPad / Mac ← iCloud Drive ← Obsidian vault ← Markdown + originální obrázek
 ```
 
-Nevzniká žádný veřejný server, databáze ani vlastní synchronizační služba. Obsidian dál používáš standardně a hotové poznámky můžeš upravovat, přesouvat i propojovat. Ink2Vault už jednou importovanou stránku nepřepíše.
+Nevzniká žádný veřejný server, databáze ani vlastní synchronizační služba. Obsidian dál používáš standardně a hotové poznámky můžeš upravovat, přesouvat i propojovat. Huion už jednou importovanou stránku nepřepíše.
 
 ## Co aplikace vytvoří
 
@@ -30,13 +30,13 @@ Označení zdroje je **Rukopis**; název výrobce se v poznámkách nepoužívá
 - Obsidian vault vytvořený v iCloud Drive,
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) přihlášený k účtu, jehož limity chceš používat.
 
-Ink2Vault automaticky nabídne veřejný iCloud kontejner Huion Note:
+Huion automaticky nabídne veřejný iCloud kontejner Huion Note:
 
 ```text
 ~/Library/Mobile Documents/iCloud~com~huion~note/Documents
 ```
 
-Sešity v něm mohou být ZIP archivy bez přípony; Ink2Vault je rozpozná podle obsahu. Jako alternativní zdroj lze stále použít lokální data aplikace nebo běžnou složku se zálohami `.huionnoteios` či `.zip`.
+Sešity v něm mohou být ZIP archivy bez přípony; Huion je rozpozná podle obsahu. Jako alternativní zdroj lze stále použít lokální data aplikace nebo běžnou složku se zálohami `.huionnoteios` či `.zip`.
 
 ## První spuštění
 
@@ -51,10 +51,10 @@ Rozbal distribuční ZIP, otevři jeho složku v Terminálu a spusť:
 Instalátor nepotřebuje `sudo`, nic nestahuje a nepřidává externí Python balíčky. Program uloží do:
 
 ```text
-~/Library/Application Support/Ink2Vault/runtime
+~/Library/Application Support/Huion/runtime
 ```
 
-Příkaz vytvoří jako `~/.local/bin/ink2vault`. Pokud `~/.local/bin` ještě není v `PATH`, přidej do `~/.zprofile`:
+Příkaz vytvoří jako `~/.local/bin/huion`. Pokud `~/.local/bin` ještě není v `PATH`, přidej do `~/.zprofile`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -71,9 +71,9 @@ claude auth login
 Po instalaci spusť:
 
 ```bash
-ink2vault configure
-ink2vault doctor
-ink2vault scan
+huion configure
+huion doctor
+huion import
 ```
 
 `configure` se zeptá na:
@@ -93,26 +93,54 @@ Pokud macOS vyžádá přístup k datům jiné aplikace nebo k iCloudu, povol ho
 
 ## Automatický provoz
 
-Po úspěšném ručním skenu nainstaluj uživatelskou službu macOS:
+Po úspěšném ručním importu nainstaluj uživatelskou službu macOS:
 
 ```bash
-ink2vault service install
+huion service install
 ```
 
 Služba se spustí po přihlášení a ve výchozím nastavení kontroluje nové zálohy každou minutu. Správa služby:
 
 ```bash
-ink2vault service status
-ink2vault service uninstall
+huion service status
+huion service uninstall
 ```
 
 Stav importů a poslední chyby:
 
 ```bash
-ink2vault status
-ink2vault scan --retry-now
-tail -f "$HOME/Library/Application Support/Ink2Vault/ink2vault.log"
+huion status
+huion retry
+tail -f "$HOME/Library/Application Support/Huion/huion.log"
 ```
+
+## Příkazy
+
+Samotný příkaz otevře interaktivní menu se všemi běžnými akcemi:
+
+```bash
+huion
+```
+
+Stejné akce lze spouštět přímo:
+
+```bash
+huion import          # importuje všechny dosud neimportované stránky, staré i nové
+huion retry           # hned zopakuje chybné importy
+huion status          # ukáže počty a poslední zpracované stránky
+huion reset errors    # zapomene chyby, aby je další import zkusil znovu
+huion configure       # změní zdrojovou složku a umístění v Obsidianu
+huion doctor          # zkontroluje složky, Claude Code a přihlášení
+huion service install # zapne automatické zpracování na pozadí
+```
+
+Úplné zapomenutí importní historie je záměrně potvrzované:
+
+```bash
+huion reset all
+```
+
+Reset nikdy nemaže ani nepřepisuje poznámky v Obsidianu. Po `reset all` však příští import vytvoří nové kopie stránek, které už dříve zpracoval.
 
 ## Bezpečné chování
 
@@ -120,13 +148,13 @@ tail -f "$HOME/Library/Application Support/Ink2Vault/ink2vault.log"
 - Když se zdrojová stránka později změní, aplikace pouze zapíše upozornění do logu.
 - Zápis poznámky i obrázku je atomický, takže Obsidian neuvidí napůl zapsaný soubor.
 - Přerušení mezi zápisem souboru a uložením stavu nevytvoří při dalším spuštění duplikát.
-- Chyby se při sledování opakují s postupně delší prodlevou; ruční `--retry-now` čekání přeskočí.
+- Chyby se při sledování opakují s postupně delší prodlevou; ruční `huion retry` čekání přeskočí.
 
-Stav aplikace je v `~/Library/Application Support/Ink2Vault/`. Přihlašovací údaje si spravuje Claude Code; Ink2Vault žádné heslo ani API klíč neukládá. Obrázek každé nové stránky se během zpracování odešle službě Claude.
+Stav aplikace je v `~/Library/Application Support/Huion/`. Přihlašovací údaje si spravuje Claude Code; Huion žádné heslo ani API klíč neukládá. Obrázek každé nové stránky se během zpracování odešle službě Claude.
 
 ## Obsidian na iPhonu a iPadu
 
-Na všech zařízeních otevři v Obsidianu tentýž vault uložený v iCloudu. iCloud synchronizuje Markdown soubory i obrázky. Poznámky lze po importu normálně měnit; lokální evidence importů brání Ink2Vaultu v jejich přepsání.
+Na všech zařízeních otevři v Obsidianu tentýž vault uložený v iCloudu. iCloud synchronizuje Markdown soubory i obrázky. Poznámky lze po importu normálně měnit; lokální evidence importů brání Huionu v jejich přepsání.
 
 Pro spolehlivé zpracování musí Mac běžet, být přihlášený, mít v Huion Note dokončenou iCloud synchronizaci a dostupný iCloud vault. Samotné čtení a úpravy v Obsidianu na mobilních zařízeních na běhu Macu nezávisí.
 
@@ -135,7 +163,7 @@ Pro spolehlivé zpracování musí Mac běžet, být přihlášený, mít v Huio
 Aplikace nemá žádné externí Python závislosti. Testy:
 
 ```bash
-PYTHONPYCACHEPREFIX=/tmp/ink2vault-pycache python3 -m unittest discover -s tests -v
+PYTHONPYCACHEPREFIX=/tmp/huion-pycache python3 -m unittest discover -s tests -v
 ```
 
 Volitelně lze příkaz nainstalovat do virtuálního prostředí:
@@ -143,5 +171,5 @@ Volitelně lze příkaz nainstalovat do virtuálního prostředí:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e .
-.venv/bin/ink2vault --help
+.venv/bin/huion --help
 ```
