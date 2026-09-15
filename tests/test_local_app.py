@@ -6,10 +6,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ink2vault.ai import AIResult, process_image
-from ink2vault.cli import main, parser
+from ink2vault.cli import cmd_reprocess, cmd_reset, cmd_retry, main, parser
 from ink2vault.config import Config
 from ink2vault.huion import Page, read_backup, read_notebook
-from ink2vault.pipeline import Pipeline, find_sources, markdown
+from ink2vault.pipeline import Pipeline, find_sources, markdown, prepare_image
 from ink2vault.state import State
 
 
@@ -49,6 +49,26 @@ class LocalPipelineTests(unittest.TestCase):
         args = parser().parse_args(["import"])
         self.assertEqual(args.command, "import")
 
+    def test_reset_without_scope_means_full_reset(self):
+        args = parser().parse_args(["reset"])
+        self.assertEqual(args.scope, "all")
+
+    def test_retry_explains_when_there_are_no_errors(self):
+        with tempfile.TemporaryDirectory() as directory, patch("ink2vault.cli.STATE_PATH", Path(directory) / "state.sqlite3"), patch("builtins.print") as output:
+            self.assertEqual(cmd_retry(type("Args", (), {})()), 0)
+        self.assertIn("huion reprocess", output.call_args.args[0])
+
+    def test_reprocess_resets_state_and_runs_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "state.sqlite3"
+            state = State(state_path)
+            state.begin("done", "a", "Sešit", 1, "hash")
+            state.done("done", "note.md")
+            pipeline = type("Pipeline", (), {"failed": 0, "scan": lambda self, **kwargs: 1})()
+            with patch("ink2vault.cli.STATE_PATH", state_path), patch("ink2vault.cli.create_pipeline", return_value=pipeline), patch("ink2vault.cli.require_ai_auth"):
+                self.assertEqual(cmd_reprocess(type("Args", (), {"yes": True})()), 0)
+            self.assertIsNone(State(state_path).get("done"))
+
     def test_claude_structured_output_is_parsed(self):
         response = {
             "structured_output": {
@@ -59,13 +79,33 @@ class LocalPipelineTests(unittest.TestCase):
         completed = type("Completed", (), {
             "returncode": 0, "stdout": json.dumps(response), "stderr": "",
         })()
-        with patch("ink2vault.ai.subprocess.run", return_value=completed) as run:
+        with patch("ink2vault.ai.preferred_provider", return_value=("claude", "test")), patch("ink2vault.ai.subprocess.run", return_value=completed) as run:
             result = process_image(Path("/tmp/page.jpg"), "Sešit", 1, "sonnet")
         self.assertEqual(result.title, "Nákup")
         self.assertEqual(result.tasks[0]["text"], "Koupit mléko")
         command = run.call_args.args[0]
         self.assertIn("--json-schema", command)
         self.assertIn("Read", command)
+
+    def test_codex_structured_output_is_parsed(self):
+        response = {
+            "title": "Porada", "summary": "Souhrn", "cleaned_text": "Text",
+            "tasks": [], "tags": ["prace"],
+        }
+
+        def fake_codex(command, **kwargs):
+            output = Path(command[command.index("--output-last-message") + 1])
+            output.write_text(json.dumps(response), encoding="utf-8")
+            return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "page.jpg"
+            image.write_bytes(JPEG)
+            with patch("ink2vault.ai.preferred_provider", return_value=("codex", "ChatGPT")), patch("ink2vault.ai.subprocess.run", side_effect=fake_codex) as run:
+                result = process_image(image, "Sešit", 1, "sonnet")
+
+        self.assertEqual(result.title, "Porada")
+        self.assertEqual(run.call_args.args[0][:2], ["codex", "exec"])
 
     def test_backup_parser_keeps_stable_page_id(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -112,6 +152,34 @@ class LocalPipelineTests(unittest.TestCase):
         self.assertIn("## Shrnutí\n\nKrátké shrnutí", value)
         self.assertIn("- [ ] Zavolat", value)
         self.assertIn("![[Attachments/page.jpg]]", value)
+
+    def test_transparent_png_is_flattened_for_ai_and_attachment(self):
+        page = Page("book", "Sešit", "page", 1, b"png", ".png", "hash")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rendered = root / "page.jpg"
+
+            def fake_sips(*args, **kwargs):
+                rendered.write_bytes(JPEG)
+                return type("Completed", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+            with patch("ink2vault.pipeline.subprocess.run", side_effect=fake_sips) as run:
+                path, image, extension = prepare_image(page, root)
+
+        self.assertEqual(path.name, "page.jpg")
+        self.assertEqual(image, JPEG)
+        self.assertEqual(extension, ".jpg")
+        self.assertEqual(run.call_args.args[0][0], "/usr/bin/sips")
+
+    def test_claude_error_uses_readable_result(self):
+        completed = type("Completed", (), {
+            "returncode": 1,
+            "stdout": json.dumps({"result": "Not logged in · Please run /login"}),
+            "stderr": "",
+        })()
+        with patch("ink2vault.ai.preferred_provider", return_value=("claude", "test")), patch("ink2vault.ai.subprocess.run", return_value=completed):
+            with self.assertRaisesRegex(RuntimeError, "Not logged in"):
+                process_image(Path("/tmp/page.jpg"), "Sešit", 1, "sonnet")
 
     def test_second_scan_never_overwrites_edited_note(self):
         with tempfile.TemporaryDirectory() as directory:

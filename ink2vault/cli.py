@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import plistlib
@@ -12,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Optional, Sequence
 
-from .ai import claude_version
+from .ai import claude_version, codex_version, preferred_provider
 from .config import APP_SUPPORT, CONFIG_PATH, LEGACY_PLIST_PATH, LOG_PATH, PLIST_PATH, STATE_PATH, Config, suggested_source, suggested_vault_root
 from .pipeline import Pipeline
 from .state import State
@@ -73,17 +72,6 @@ def cmd_configure(args: argparse.Namespace) -> int:
     return cmd_doctor(argparse.Namespace())
 
 
-def claude_auth_status():
-    try:
-        result = subprocess.run(["claude", "auth", "status", "--json"], capture_output=True, text=True, timeout=20)
-        if result.returncode:
-            return False, result.stderr.strip() or result.stdout.strip()
-        data = json.loads(result.stdout)
-        return bool(data.get("loggedIn")), data.get("email") or data.get("subscriptionType") or "přihlášeno"
-    except (FileNotFoundError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
-        return False, str(exc)
-
-
 def cmd_doctor(_: argparse.Namespace) -> int:
     checks = []
     try:
@@ -95,12 +83,18 @@ def cmd_doctor(_: argparse.Namespace) -> int:
         ])
     except RuntimeError as exc:
         checks.append(("Konfigurace", False, str(exc)))
+    tools = []
     try:
-        checks.append(("Claude Code", True, claude_version()))
-    except RuntimeError as exc:
-        checks.append(("Claude Code", False, str(exc)))
-    logged_in, auth_detail = claude_auth_status()
-    checks.append(("Claude účet", logged_in, str(auth_detail)))
+        tools.append(codex_version())
+    except RuntimeError:
+        pass
+    try:
+        tools.append(claude_version())
+    except RuntimeError:
+        pass
+    provider, auth_detail = preferred_provider()
+    checks.append(("AI nástroj", bool(tools), ", ".join(tools) or "Codex CLI ani Claude Code nejsou nainstalované"))
+    checks.append(("AI účet", provider is not None, "%s · %s" % (provider or "nepřihlášeno", auth_detail)))
     for label, okay, detail in checks:
         print("%s  %-18s %s" % ("✓" if okay else "✗", label, detail))
     return 0 if all(item[1] for item in checks) else 1
@@ -110,16 +104,39 @@ def create_pipeline() -> Pipeline:
     return Pipeline(Config.load(), State(STATE_PATH))
 
 
+def require_ai_auth() -> None:
+    provider, _ = preferred_provider()
+    if not provider:
+        raise RuntimeError("Není přihlášený Codex ani Claude. Spusť: codex login (nebo claude auth login)")
+
+
 def cmd_import(args: argparse.Namespace) -> int:
-    count = create_pipeline().scan(retry_errors=args.retry_errors, retry_now=args.retry_now)
-    print("Hotovo. Nově vytvořených poznámek: %s" % count)
+    require_ai_auth()
+    pipeline = create_pipeline()
+    count = pipeline.scan(retry_errors=args.retry_errors, retry_now=args.retry_now)
+    if pipeline.failed:
+        print("Import selhal u %s stránek. Podrobnosti zobrazí: huion status" % pipeline.failed)
+        return 1
+    if count:
+        print("Hotovo. Nově vytvořených poznámek: %s" % count)
+    else:
+        print("Žádné nové stránky k importu. Už hotové stránky znovu zpracuje: huion reprocess")
     return 0
 
 
 def cmd_retry(_: argparse.Namespace) -> int:
-    count = create_pipeline().scan(retry_errors=True, retry_now=True)
-    print("Hotovo. Po opakování vytvořených poznámek: %s" % count)
-    return 0
+    state = State(STATE_PATH)
+    error_count = next((row["count"] for row in state.counts() if row["status"] == "error"), 0)
+    if not error_count:
+        print("Žádné chybné importy k opakování. Už hotové stránky znovu zpracuje: huion reprocess")
+        return 0
+    require_ai_auth()
+    pipeline = create_pipeline()
+    count = pipeline.scan(retry_errors=True, retry_now=True)
+    print("Hotovo. Úspěšně zopakovaných importů: %s · Stále chybných: %s" % (
+        count, max(0, error_count - count),
+    ))
+    return 1 if pipeline.failed else 0
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
@@ -143,7 +160,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     ))
     for row in state.recent(args.limit):
         target = row["note_path"] or row["error"] or ""
-        print("%-10s %s · strana %s  %s" % (row["status"], row["notebook"], row["page_number"], target))
+        status = {"done": "hotovo", "error": "chyba", "processing": "zpracování"}.get(row["status"], row["status"])
+        print("%-10s %s · strana %s  %s" % (status, row["notebook"], row["page_number"], target))
     return 0
 
 
@@ -151,7 +169,10 @@ def cmd_reset(args: argparse.Namespace) -> int:
     state = State(STATE_PATH)
     if args.scope == "errors":
         removed = state.reset_errors()
-        print("Resetováno chybných nebo přerušených importů: %s" % removed)
+        if removed:
+            print("Zapomenuté chybné nebo přerušené importy: %s" % removed)
+        else:
+            print("Žádné chybné ani přerušené importy nebyly evidované.")
         return 0
     if not args.yes:
         print("Poznámky v Obsidianu zůstanou zachované.")
@@ -162,6 +183,29 @@ def cmd_reset(args: argparse.Namespace) -> int:
             return 1
     removed = state.reset_all()
     print("Importní historie byla vymazána. Záznamů: %s" % removed)
+    return 0
+
+
+def cmd_reprocess(args: argparse.Namespace) -> int:
+    state = State(STATE_PATH)
+    total = sum(row["count"] for row in state.counts())
+    if not total:
+        print("Importní historie je prázdná. Spouštím běžný import.")
+    elif not args.yes:
+        print("Existující poznámky v Obsidianu zůstanou zachované.")
+        print("Pro každou nalezenou stránku vznikne nově zpracovaná kopie.")
+        answer = input("Pro nové zpracování napiš REPROCESS: ").strip()
+        if answer != "REPROCESS":
+            print("Nové zpracování zrušeno.")
+            return 1
+    require_ai_auth()
+    state.reset_all()
+    pipeline = create_pipeline()
+    count = pipeline.scan(retry_errors=True, retry_now=True)
+    if pipeline.failed:
+        print("Nové zpracování selhalo u %s stránek. Podrobnosti zobrazí: huion status" % pipeline.failed)
+        return 1
+    print("Hotovo. Nově zpracovaných poznámek: %s" % count)
     return 0
 
 
@@ -184,11 +228,7 @@ def cmd_service(args: argparse.Namespace) -> int:
         print("Služba byla odstraněna.")
         return 0
     config = Config.load()
-    if not shutil.which("claude"):
-        raise RuntimeError("Claude Code není v PATH. Nejdřív jej nainstaluj a přihlas.")
-    logged_in, _ = claude_auth_status()
-    if not logged_in:
-        raise RuntimeError("Claude účet není přihlášený. Nejdřív spusť: claude auth login")
+    require_ai_auth()
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     APP_SUPPORT.mkdir(parents=True, exist_ok=True)
     python_path = os.pathsep.join(filter(None, [str(module_root()), os.environ.get("PYTHONPATH", "")]))
@@ -203,6 +243,7 @@ def cmd_service(args: argparse.Namespace) -> int:
         "ProcessType": "Background",
         "EnvironmentVariables": {
             "PATH": os.pathsep.join(filter(None, [
+                str(Path(shutil.which("codex")).parent) if shutil.which("codex") else "",
                 str(Path(shutil.which("claude")).parent) if shutil.which("claude") else "",
                 os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
             ])),
@@ -220,7 +261,7 @@ def cmd_service(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(prog="huion", description="Poznámky z Huion Note přes Claude do Obsidianu")
+    result = argparse.ArgumentParser(prog="huion", description="Poznámky z Huion Note přes AI do Obsidianu")
     result.add_argument("--verbose", action="store_true")
     sub = result.add_subparsers(dest="command")
     configure = sub.add_parser("configure", help="Nastavit vstupní složku a Obsidian vault")
@@ -232,14 +273,17 @@ def parser() -> argparse.ArgumentParser:
     configure.add_argument("--interval", type=int)
     configure.add_argument("--non-interactive", action="store_true")
     configure.set_defaults(func=cmd_configure)
-    doctor = sub.add_parser("doctor", help="Ověřit složky a přihlášení Claude")
+    doctor = sub.add_parser("doctor", help="Ověřit složky a přihlášení Codex/Claude")
     doctor.set_defaults(func=cmd_doctor)
     import_command = sub.add_parser("import", aliases=["scan"], help="Importovat existující i nové stránky")
     import_command.add_argument("--retry-errors", action="store_true", help="Zopakovat také dříve chybné stránky")
     import_command.add_argument("--retry-now", action="store_true", help=argparse.SUPPRESS)
     import_command.set_defaults(func=cmd_import)
-    retry = sub.add_parser("retry", help="Hned zopakovat všechny chybné importy")
+    retry = sub.add_parser("retry", help="Hned zopakovat pouze chybné importy")
     retry.set_defaults(func=cmd_retry)
+    reprocess = sub.add_parser("reprocess", help="Znovu zpracovat i už hotové stránky")
+    reprocess.add_argument("--yes", action="store_true", help="Nevyžadovat potvrzení")
+    reprocess.set_defaults(func=cmd_reprocess)
     watch = sub.add_parser("watch", help="Průběžně sledovat vstupní složku")
     watch.add_argument("--interval", type=int)
     watch.set_defaults(func=cmd_watch)
@@ -247,7 +291,7 @@ def parser() -> argparse.ArgumentParser:
     status.add_argument("--limit", type=int, default=20)
     status.set_defaults(func=cmd_status)
     reset = sub.add_parser("reset", help="Resetovat chyby nebo celou importní historii")
-    reset.add_argument("scope", choices=["errors", "all"], nargs="?", default="errors")
+    reset.add_argument("scope", choices=["errors", "all"], nargs="?", default="all")
     reset.add_argument("--yes", action="store_true", help="U úplného resetu nevyžadovat potvrzení")
     reset.set_defaults(func=cmd_reset)
     service = sub.add_parser("service", help="Spravovat automatické spouštění přes launchd")
@@ -260,16 +304,17 @@ def interactive_menu() -> int:
     actions = {
         "1": ("Importovat vše, co je v iCloudu", cmd_import, argparse.Namespace(retry_errors=False, retry_now=False)),
         "2": ("Zopakovat chybné importy", cmd_retry, argparse.Namespace()),
-        "3": ("Zobrazit stav", cmd_status, argparse.Namespace(limit=20)),
-        "4": ("Nastavit zdroj a Obsidian", cmd_configure, argparse.Namespace(
+        "3": ("Znovu zpracovat i hotové stránky", cmd_reprocess, argparse.Namespace(yes=False)),
+        "4": ("Zobrazit stav", cmd_status, argparse.Namespace(limit=20)),
+        "5": ("Nastavit zdroj a Obsidian", cmd_configure, argparse.Namespace(
             source=None, vault=None, notes=None, attachments=None, model=None, interval=None, non_interactive=False,
         )),
-        "5": ("Spustit kontrolu nastavení", cmd_doctor, argparse.Namespace()),
-        "6": ("Zapnout automatickou službu", cmd_service, argparse.Namespace(action="install")),
-        "7": ("Zobrazit stav služby", cmd_service, argparse.Namespace(action="status")),
-        "8": ("Vypnout automatickou službu", cmd_service, argparse.Namespace(action="uninstall")),
-        "9": ("Resetovat chybné importy", cmd_reset, argparse.Namespace(scope="errors", yes=True)),
-        "10": ("Resetovat celou importní historii", cmd_reset, argparse.Namespace(scope="all", yes=False)),
+        "6": ("Spustit kontrolu nastavení", cmd_doctor, argparse.Namespace()),
+        "7": ("Zapnout automatickou službu", cmd_service, argparse.Namespace(action="install")),
+        "8": ("Zobrazit stav služby", cmd_service, argparse.Namespace(action="status")),
+        "9": ("Vypnout automatickou službu", cmd_service, argparse.Namespace(action="uninstall")),
+        "10": ("Zapomenout chybné importy", cmd_reset, argparse.Namespace(scope="errors", yes=True)),
+        "11": ("Zapomenout celou importní historii", cmd_reset, argparse.Namespace(scope="all", yes=False)),
     }
     while True:
         print("\nHuion\n=====")

@@ -1,9 +1,9 @@
 # Huion
 
-Huion je malá lokální aplikace pro macOS. Čte sešity synchronizované aplikací Huion Note přes iCloud, každou novou stránku nechá přečíst Claudem a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
+Huion je malá lokální aplikace pro macOS. Čte sešity synchronizované aplikací Huion Note přes iCloud, každou novou stránku nechá přečíst AI a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
 
 ```text
-Huion Note na iPhonu/iPadu → iCloud → Huion + Claude na Macu
+Huion Note na iPhonu/iPadu → iCloud → Huion + Codex/Claude na Macu
                                              ↓
 iPhone / iPad / Mac ← iCloud Drive ← Obsidian vault ← Markdown + originální obrázek
 ```
@@ -28,7 +28,7 @@ Označení zdroje je **Rukopis**; název výrobce se v poznámkách nepoužívá
 - macOS s Pythonem 3.9 nebo novějším,
 - Huion Note nainstalovaný na Apple Silicon Macu se zapnutou iCloud synchronizací,
 - Obsidian vault vytvořený v iCloud Drive,
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) přihlášený k účtu, jehož limity chceš používat.
+- Codex CLI přihlášený přes ChatGPT předplatné, případně Claude Code přihlášený přes Claude Pro/Max.
 
 Huion automaticky nabídne veřejný iCloud kontejner Huion Note:
 
@@ -60,7 +60,13 @@ Příkaz vytvoří jako `~/.local/bin/huion`. Pokud `~/.local/bin` ještě není
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Na novém Macu musí být nainstalovaný také Claude Code. Aktuální oficiální postup je v [dokumentaci Anthropic](https://docs.anthropic.com/en/docs/claude-code/getting-started). Potom se přihlas účtem Claude Pro/Max:
+Na novém Macu nainstaluj Codex CLI a přihlas se účtem ChatGPT:
+
+```bash
+codex login
+```
+
+Pokud Codex není přihlášený, Huion umí jako náhradní variantu použít také [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started):
 
 ```bash
 claude auth login
@@ -127,20 +133,21 @@ Stejné akce lze spouštět přímo:
 ```bash
 huion import          # importuje všechny dosud neimportované stránky, staré i nové
 huion retry           # hned zopakuje chybné importy
+huion reprocess       # znovu zpracuje i hotové stránky a zachová staré poznámky
 huion status          # ukáže počty a poslední zpracované stránky
 huion reset errors    # zapomene chyby, aby je další import zkusil znovu
 huion configure       # změní zdrojovou složku a umístění v Obsidianu
-huion doctor          # zkontroluje složky, Claude Code a přihlášení
+huion doctor          # zkontroluje složky, AI nástroje a přihlášení
 huion service install # zapne automatické zpracování na pozadí
 ```
 
 Úplné zapomenutí importní historie je záměrně potvrzované:
 
 ```bash
-huion reset all
+huion reset
 ```
 
-Reset nikdy nemaže ani nepřepisuje poznámky v Obsidianu. Po `reset all` však příští import vytvoří nové kopie stránek, které už dříve zpracoval.
+`huion reset` a `huion reset all` jsou stejné. Reset nikdy nemaže ani nepřepisuje poznámky v Obsidianu. Příští import vytvoří nové kopie stránek, které už dříve zpracoval. Příkaz `huion reprocess` provede úplný reset a nový import v jednom kroku.
 
 ## Bezpečné chování
 
@@ -150,7 +157,7 @@ Reset nikdy nemaže ani nepřepisuje poznámky v Obsidianu. Po `reset all` však
 - Přerušení mezi zápisem souboru a uložením stavu nevytvoří při dalším spuštění duplikát.
 - Chyby se při sledování opakují s postupně delší prodlevou; ruční `huion retry` čekání přeskočí.
 
-Stav aplikace je v `~/Library/Application Support/Huion/`. Přihlašovací údaje si spravuje Claude Code; Huion žádné heslo ani API klíč neukládá. Obrázek každé nové stránky se během zpracování odešle službě Claude.
+Stav aplikace je v `~/Library/Application Support/Huion/`. Přihlašovací údaje si spravuje Codex CLI nebo Claude Code; Huion žádné heslo ani API klíč neukládá. Obrázek každé nové stránky se během zpracování odešle zvolenému AI poskytovateli. Přihlášený Codex má přednost, Claude slouží jako fallback.
 
 ## Obsidian na iPhonu a iPadu
 

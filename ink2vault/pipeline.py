@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -55,7 +56,7 @@ source_id: {source_id}
 notebook: {notebook}
 page: {page_number}
 tags: {tags}
-ai_provider: Claude
+ai_provider: AI CLI
 ---
 
 # {plain_title}
@@ -90,15 +91,34 @@ def atomic_write(path: Path, content: bytes) -> None:
         raise
 
 
+def prepare_image(page: Page, directory: Path):
+    """Flatten Huion's transparent PNG canvas onto white for AI and Obsidian."""
+    source = directory / ("page%s" % page.image_ext)
+    source.write_bytes(page.image)
+    if page.image_ext.lower() != ".png":
+        return source, page.image, page.image_ext
+    rendered = directory / "page.jpg"
+    completed = subprocess.run(
+        ["/usr/bin/sips", "-s", "format", "jpeg", str(source), "--out", str(rendered)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    if completed.returncode or not rendered.is_file():
+        detail = completed.stderr.strip() or completed.stdout.strip() or "neznámá chyba"
+        raise RuntimeError("Nelze vykreslit průhlednou stránku na bílý podklad: %s" % detail)
+    return rendered, rendered.read_bytes(), ".jpg"
+
+
 class Pipeline:
     def __init__(self, config: Config, state: State):
         self.config = config
         self.state = state
+        self.failed = 0
 
     def scan(self, retry_errors: bool = True, retry_now: bool = False) -> int:
         if not self.config.vault.exists():
             raise RuntimeError("Obsidian vault neexistuje nebo není stažený z iCloudu: %s" % self.config.vault)
         processed = 0
+        self.failed = 0
         for backup in find_sources(self.config.source):
             try:
                 pages = read_source(backup)
@@ -130,14 +150,14 @@ class Pipeline:
                     self._process_page(backup, page, source_id)
                     processed += 1
                 except Exception as exc:
+                    self.failed += 1
                     self.state.fail(source_id, str(exc))
                     LOG.error("%s, strana %s: %s", page.notebook_name, page.page_number, exc)
         return processed
 
     def _process_page(self, backup: Path, page: Page, source_id: str) -> None:
         with tempfile.TemporaryDirectory(prefix="ink2vault-") as directory:
-            image_path = Path(directory) / ("page%s" % page.image_ext)
-            image_path.write_bytes(page.image)
+            image_path, display_image, display_ext = prepare_image(page, Path(directory))
             LOG.info("AI zpracovává %s, stranu %s", page.notebook_name, page.page_number)
             result = process_image(image_path, page.notebook_name, page.page_number, self.config.claude_model)
 
@@ -156,11 +176,11 @@ class Pipeline:
         attachment = ""
         if self.config.save_original:
             attachment_rel = Path(self.config.attachment_folder) / ("%s-%s%s" % (
-                safe_name(page.notebook_name), safe_name(page.page_id), page.image_ext,
+                safe_name(page.notebook_name), safe_name(page.page_id), display_ext,
             ))
             attachment_path = self.config.vault / attachment_rel
             if not attachment_path.exists():
-                atomic_write(attachment_path, page.image)
+                atomic_write(attachment_path, display_image)
             attachment = attachment_rel.as_posix()
 
         content = markdown(self.config.source_label, page, result, attachment, source_id).encode("utf-8")

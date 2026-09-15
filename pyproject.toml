@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "huion"
-version = "0.2.0"
+version = "0.2.1"
 description = "Convert local Huion note backups into AI-enriched Obsidian notes"
 requires-python = ">=3.9"
 
