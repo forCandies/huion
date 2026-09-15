@@ -42,9 +42,15 @@ async def lifespan(_: FastAPI):
             "source_label": settings.default_source_label,
         })
         db.set_connection(user["id"], "drive", "connected", "ukázkový účet", {"folder_id": "root", "demo": True})
-        db.set_connection(user["id"], "ai", "connected", "Lokální TuzkaOCR", {"provider": "TuzkaOCR", "model": "handwritten"})
+        ai = db.connection(user["id"], "ai")
+        ai_details = json.loads(ai["details_json"] or "{}") if ai else {}
+        if not ai or ai_details.get("provider") not in {"claude", "gemini"}:
+            db.set_connection(user["id"], "ai", "attention", "AI zatím nepřipojena", {"provider": "demo"})
         db.set_connection(user["id"], "sync", "attention", "Self-hosted LiveSync", {"devices": 0})
         db.seed_demo(user["id"], demo_imports())
+        with db.connect() as conn:
+            for item in demo_imports():
+                conn.execute("UPDATE imports SET ai_json=COALESCE(ai_json, ?) WHERE user_id=? AND source_id=?", (item["ai_json"], user["id"], item["source_id"]))
     task = asyncio.create_task(pipeline.loop())
     yield
     task.cancel()
@@ -165,6 +171,26 @@ async def provision_sync(request: Request):
     return RedirectResponse("/settings?connected=sync#connections", 303)
 
 
+@app.post("/connections/ai")
+def connect_ai(request: Request, provider: str = Form(...), credential: str = Form(...), model: str = Form("")):
+    user = current(request)
+    credential = credential.strip()
+    if provider not in {"claude", "gemini"} or not credential:
+        raise HTTPException(400, "Vyber AI službu a vlož přihlašovací údaj.")
+    if len(credential) > 4096:
+        raise HTTPException(400, "Přihlašovací údaj je příliš dlouhý.")
+    if provider == "claude":
+        details = {"provider": "claude", "model": model.strip() or settings.claude_model}
+        secret = {"oauth_token": credential}
+        label = "Claude · předplatné"
+    else:
+        details = {"provider": "gemini", "model": model.strip() or settings.gemini_model}
+        secret = {"api_key": credential}
+        label = "Gemini API"
+    db.set_connection(user["id"], "ai", "connected", label, details, secret_store.seal(secret))
+    return RedirectResponse("/settings?connected=ai#connections", 303)
+
+
 @app.post("/auth/demo")
 def demo_login():
     if not settings.development:
@@ -214,7 +240,8 @@ def note_detail(note_id: int, request: Request):
     if not note:
         raise HTTPException(404)
     events = db.all("SELECT * FROM import_events WHERE import_id=? ORDER BY id", (note_id,))
-    return templates.TemplateResponse("note_detail.html", ctx(request, user, note=note, events=events))
+    ai_result = json.loads(note["ai_json"]) if note["ai_json"] else None
+    return templates.TemplateResponse("note_detail.html", ctx(request, user, note=note, events=events, ai_result=ai_result))
 
 
 @app.get("/media/{note_id}")

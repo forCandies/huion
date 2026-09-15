@@ -30,7 +30,7 @@
 
   <aside class="panel connections">
     <div class="panel-head"><div><h2>Propojení</h2><p>Stav celého řetězce</p></div></div>
-    {% set items = [('drive','Google Drive','Zdroj záloh','G'),('ai','Lokální OCR','Přepis bez API','Aa'),('sync','Obsidian LiveSync','Synchronizace vaultu','O')] %}
+    {% set items = [('drive','Google Drive','Zdroj záloh','G'),('ai','AI zpracování','Shrnutí a úkoly','AI'),('sync','Obsidian LiveSync','Synchronizace vaultu','O')] %}
     {% for key, title, subtitle, icon in items %}
     {% set c = connections.get(key) %}
     <div class="connection-row">
@@ -46,7 +46,7 @@
 <section class="panel pipeline-panel">
   <div class="panel-head"><div><h2>Aktuální tok</h2><p>Poslední import prochází automatickou pipeline.</p></div><span class="live-pill"><i></i> Živě</span></div>
   <div class="pipeline">
-    {% for icon,label,state in [('↓','Staženo','done'),('▧','Rozbaleno','done'),('Aa','OCR','active'),('M↓','Markdown','future'),('◇','LiveSync','future')] %}
+    {% for icon,label,state in [('↓','Staženo','done'),('Aa','OCR','done'),('AI','Shrnutí','active'),('M↓','Markdown','future'),('◇','LiveSync','future')] %}
     <div class="pipe-step {{ state }}"><span>{{ icon }}</span><strong>{{ label }}</strong><small>{% if state == 'done' %}Hotovo{% elif state == 'active' %}Probíhá{% else %}Čeká{% endif %}</small></div>
     {% if not loop.last %}<div class="pipe-line {{ 'done' if state == 'done' else '' }}"></div>{% endif %}
     {% endfor %}

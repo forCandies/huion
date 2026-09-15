@@ -24,6 +24,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app PATH=/opt/venv/
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
     && python3 -m venv /opt/venv \
     && rm -rf /var/lib/apt/lists/*
+RUN npm install -g @anthropic-ai/claude-code@2.1.273 \
+    && npm cache clean --force
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt

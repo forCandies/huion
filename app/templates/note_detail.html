@@ -10,9 +10,10 @@
 {% if note.protected %}<div class="alert protected"><strong>Poznámka byla po importu upravena</strong><span>Importér ji chrání před automatickým přepsáním.</span></div>{% endif %}
 <section class="detail-grid">
   <article class="panel preview-panel">
-    <div class="tabs"><button class="active" data-tab="source">Originál</button><button data-tab="ocr">OCR přepis</button><button data-tab="markdown">Markdown</button></div>
+    <div class="tabs"><button class="active" data-tab="source">Originál</button><button data-tab="ocr">OCR přepis</button><button data-tab="ai">AI výstup</button><button data-tab="markdown">Markdown</button></div>
     <div class="tab-content active" id="tab-source"><div class="paper-preview"><img src="{{ note.image_path if note.image_path.startswith('/static') else '/media/' ~ note.id }}" alt="Originální stránka"></div></div>
     <div class="tab-content" id="tab-ocr"><pre>{{ note.raw_ocr or 'OCR ještě není dostupné.' }}</pre></div>
+    <div class="tab-content" id="tab-ai">{% if ai_result %}<h3>Shrnutí</h3><p>{{ ai_result.summary }}</p><h3>Úkoly</h3>{% if ai_result.tasks %}<ul>{% for task in ai_result.tasks %}<li><input type="checkbox" disabled> {{ task.text }}{% if task.due %} · {{ task.due }}{% endif %}</li>{% endfor %}</ul>{% else %}<p>V poznámce nejsou žádné úkoly.</p>{% endif %}<h3>Štítky</h3><p>{% for tag in ai_result.tags %}<code>#{{ tag }}</code> {% endfor %}</p>{% else %}<p>AI zpracování ještě není dostupné.</p>{% endif %}</div>
     <div class="tab-content" id="tab-markdown"><pre>{{ note.markdown or 'Markdown ještě nebyl vytvořen.' }}</pre></div>
   </article>
   <aside class="detail-side">

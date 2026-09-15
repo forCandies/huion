@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 
 
 def demo_imports() -> list[dict]:
@@ -29,6 +30,7 @@ def demo_imports() -> list[dict]:
             events.append(("ocr", "done" if stage != "ocr" else "error", "Rukopis rozpoznán" if stage != "ocr" else "OCR nedosáhlo minimální jistoty"))
         if stage == "synced":
             events.extend([
+                ("ai", "done", "AI vytvořila shrnutí, úkoly a štítky"),
                 ("markdown", "done", "Markdown vytvořen atomickým zápisem"),
                 ("sync", "done", "Poznámka odeslána do LiveSync"),
             ])
@@ -57,6 +59,7 @@ Toto je ukázka zpracovaného obsahu ručně psané stránky. Výsledná poznám
             "target_path": f"Inbox/{now.date().isoformat()} – {title}.md" if status == "done" else None,
             "image_path": f"/static/demo/page-{index:02d}.png",
             "raw_ocr": "Ukázkový surový přepis rukopisu. Některá slova mohou být rozpoznána nepřesně.",
+            "ai_json": json.dumps({"title": title, "summary": "Stručné shrnutí obsahu ručně psané stránky.", "cleaned_text": "Toto je ukázka vyčištěného přepisu poznámky.", "tasks": [{"text": "Zkontrolovat výsledek", "due": None}, {"text": "Doplnit související odkazy", "due": None}], "tags": ["rukopis", "poznámky"]}, ensure_ascii=False),
             "markdown": markdown, "error": "Rukopis je příliš slabý nebo překrytý kresbou." if status == "error" else None,
             "source_checksum": f"demo-{index:02d}", "protected": status == "done" and index in {1, 2, 5},
             "updated_at": stamp, "events": events,

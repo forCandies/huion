@@ -45,6 +45,17 @@ class ConfigurationTests(unittest.TestCase):
             self.assertEqual(pages[0].page_id, "98765432109876543210")
             self.assertEqual(pages[0].image_ext, ".jpg")
 
+    def test_ai_result_normalizes_tasks_and_tags(self):
+        from app.ai import AIResult
+        result = AIResult.from_dict({
+            "title": "  Porada  ", "summary": "Souhrn", "cleaned_text": "Text",
+            "tasks": [{"text": " Zavolat Janě ", "due": "2026-09-20"}, {"text": "", "due": None}],
+            "tags": ["Projekt Alfa", "projekt-alfa", " Porada "],
+        })
+        self.assertEqual(result.title, "Porada")
+        self.assertEqual(result.tasks, [{"text": "Zavolat Janě", "due": "2026-09-20"}])
+        self.assertEqual(result.tags, ["projekt-alfa", "porada"])
+
 
 if __name__ == "__main__":
     unittest.main()

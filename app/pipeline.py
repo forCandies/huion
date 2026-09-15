@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 
+from .ai import AIEnricher, AIResult
 from .config import Settings
 from .db import Database, now
 from .huion import Page, read_backup
@@ -27,6 +28,7 @@ def safe_name(value: str, fallback: str = "Poznámka") -> str:
 class Pipeline:
     def __init__(self, cfg: Settings, db: Database, secrets: SecretStore):
         self.cfg, self.db, self.secrets = cfg, db, secrets
+        self.ai = AIEnricher(cfg, db, secrets)
         self.lock = asyncio.Lock()
 
     async def loop(self) -> None:
@@ -117,7 +119,11 @@ class Pipeline:
             conn.execute("INSERT INTO import_events(import_id,stage,status,message,created_at) VALUES(?,?,?,?,?)", (import_id, "download", "done", f"Staženo z Google Drive: {source['name']}", stamp))
         try:
             ocr = await self.ocr(page.image, image_path.name)
-            title = safe_name(next((line.strip() for line in ocr.splitlines() if line.strip()), ""), f"{page.notebook_name} – strana {page.page_number}")
+            with self.db.connect() as conn:
+                conn.execute("UPDATE imports SET stage='ai',progress=55,raw_ocr=?,updated_at=? WHERE id=?", (ocr, now(), import_id))
+                conn.execute("INSERT INTO import_events(import_id,stage,status,message,created_at) VALUES(?,?,?,?,?)", (import_id, "ocr", "done", "Rukopis byl převeden na text", now()))
+            enriched, ai_provider = await self.ai.enrich(user_id, ocr, page.notebook_name, page.page_number)
+            title = safe_name(enriched.title, f"{page.notebook_name} – strana {page.page_number}")
             note_folder = Path(profile["note_folder"])
             attachment_folder = Path(profile["attachment_folder"])
             filename = profile["filename_template"]
@@ -129,7 +135,7 @@ class Pipeline:
             if profile["save_original"]:
                 target_image.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(image_path, target_image)
-            markdown = self.markdown(profile["source_label"], page, title, ocr, attachment_rel.as_posix() if profile["save_original"] else "", source_id)
+            markdown = self.markdown(profile["source_label"], page, enriched, attachment_rel.as_posix() if profile["save_original"] else "", source_id, ai_provider)
             note_path = vault / note_rel
             note_path.parent.mkdir(parents=True, exist_ok=True)
             if note_path.exists():
@@ -139,8 +145,8 @@ class Pipeline:
             note_path.write_text(markdown, encoding="utf-8")
             with self.db.connect() as conn:
                 next_status = "review" if profile["processing_mode"] == "review" else "ready"
-                conn.execute("UPDATE imports SET title=?,status=?,stage='livesync',progress=80,raw_ocr=?,markdown=?,target_path=?,protected=1,updated_at=? WHERE id=?", (title, next_status, ocr, markdown, note_rel.as_posix(), now(), import_id))
-                conn.execute("INSERT INTO import_events(import_id,stage,status,message,created_at) VALUES(?,?,?,?,?)", (import_id, "ocr", "done", "Rukopis byl převeden na text", now()))
+                conn.execute("UPDATE imports SET title=?,status=?,stage='livesync',progress=80,ai_json=?,markdown=?,target_path=?,protected=1,updated_at=? WHERE id=?", (title, next_status, json.dumps(enriched.as_dict(), ensure_ascii=False), markdown, note_rel.as_posix(), now(), import_id))
+                conn.execute("INSERT INTO import_events(import_id,stage,status,message,created_at) VALUES(?,?,?,?,?)", (import_id, "ai", "done", f"{ai_provider} vytvořil shrnutí, úkoly a štítky", now()))
             if profile["processing_mode"] != "review":
                 await self.publish(user_id, import_id, note_path, note_rel, target_image if profile["save_original"] else None, attachment_rel)
         except Exception as exc:
@@ -162,9 +168,14 @@ class Pipeline:
                 await asyncio.sleep(2)
         raise TimeoutError("OCR exceeded 6 minutes")
 
-    def markdown(self, label: str, page: Page, title: str, text: str, attachment: str, source_id: str) -> str:
+    def markdown(self, label: str, page: Page, result: AIResult, attachment: str, source_id: str, ai_provider: str) -> str:
+        title = result.title
         original = f"\n## Originál\n\n![[{attachment}]]\n" if attachment else ""
-        return f'''---\ntitle: {json.dumps(title, ensure_ascii=False)}\nsource: {json.dumps(label, ensure_ascii=False)}\nsource_id: {json.dumps(source_id)}\nnotebook: {json.dumps(page.notebook_name, ensure_ascii=False)}\npage: {page.page_number}\n---\n\n# {title}\n\n{text or "_Text nebyl rozpoznán._"}\n{original}'''
+        tasks = "\n".join(f"- [ ] {task['text']}" + (f" 📅 {task['due']}" if task.get("due") else "") for task in result.tasks)
+        tasks_section = f"\n## Úkoly\n\n{tasks}\n" if tasks else ""
+        tags = " ".join(f"#{tag}" for tag in result.tags)
+        tags_section = f"\n## Štítky\n\n{tags}\n" if tags else ""
+        return f'''---\ntitle: {json.dumps(title, ensure_ascii=False)}\nsource: {json.dumps(label, ensure_ascii=False)}\nsource_id: {json.dumps(source_id)}\nnotebook: {json.dumps(page.notebook_name, ensure_ascii=False)}\npage: {page.page_number}\ntags: {json.dumps(result.tags, ensure_ascii=False)}\nai_provider: {json.dumps(ai_provider)}\n---\n\n# {title}\n\n## Shrnutí\n\n{result.summary or "_Shrnutí nebylo vytvořeno._"}\n{tasks_section}\n## Poznámka\n\n{result.cleaned_text or "_Text nebyl rozpoznán._"}\n{tags_section}{original}'''
 
     async def publish(self, user_id: int, import_id: int, note: Path, note_rel: Path, image: Path | None, image_rel: Path) -> None:
         sync = self.db.connection(user_id, "sync")

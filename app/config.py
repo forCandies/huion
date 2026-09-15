@@ -32,6 +32,9 @@ class Settings:
     ocr_url: str
     ocr_domain: str
     livesync_cli_bin: str
+    claude_cli_bin: str
+    claude_model: str
+    gemini_model: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -57,6 +60,9 @@ class Settings:
             ocr_url=os.getenv("OCR_URL", "http://ocr:8000").rstrip("/"),
             ocr_domain=os.getenv("OCR_DOMAIN", "handwritten"),
             livesync_cli_bin=os.getenv("LIVESYNC_CLI_BIN", "/usr/local/bin/livesync-cli"),
+            claude_cli_bin=os.getenv("CLAUDE_CLI_BIN", "/usr/local/bin/claude"),
+            claude_model=os.getenv("CLAUDE_MODEL", "sonnet"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         )
 
     @property

@@ -3,7 +3,7 @@
 Ink2Vault sleduje složku se zálohami ručně psaných sešitů na Google Drive. Každou stránku převede na samostatnou Markdown poznámku a jednou ji vloží do běžného Obsidian vaultu.
 
 ```text
-Google Drive → parser stránky → lokální OCR → Markdown → Self-hosted LiveSync → Obsidian
+Google Drive → parser stránky → lokální OCR → AI shrnutí a úkoly → Markdown → Self-hosted LiveSync → Obsidian
 ```
 
 Výrobce vstupního zařízení je jen technický konektor. V názvech a poznámkách se používá uživatelské označení zdroje, například **Rukopis**.
@@ -17,6 +17,7 @@ Výrobce vstupního zařízení je jen technický konektor. V názvech a poznám
 - automatické hledání nových `.huionnoteios` / ZIP záloh,
 - ověřený parser iOS zálohy; jedna stránka = jedna poznámka,
 - lokální české OCR přes TuzkaOCR,
+- AI oprava přepisu, shrnutí, úkoly a štítky přes Claude nebo Gemini,
 - nastavitelná složka poznámek, příloh, označení zdroje a šablona názvu,
 - vytvoření izolovaného CouchDB účtu a databáze z webu,
 - vložení nové poznámky přes oficiální Self-hosted LiveSync CLI,
@@ -90,6 +91,15 @@ https://ink.example.cz/connections/drive/callback
 5. Na stejném vaultu nepoužívej zároveň jiný zapisující sync.
 
 Na iOS/iPadOS synchronizuje plugin během otevřené aplikace. Dlouhodobý běh na pozadí omezuje samotný iOS.
+
+## AI zpracování
+
+V **Nastavení → AI zpracování** lze zvolit jednu ze dvou možností:
+
+- **Claude z předplatného:** na počítači s nainstalovaným Claude Code spusť `claude setup-token` a výsledný token vlož do webu. Volání přes `claude -p` čerpají limity Claude Pro/Max. Po vyčerpání limitu import skončí chybou a lze ho později zopakovat.
+- **Gemini API:** vytvoř klíč v Google AI Studio a vlož ho do webu. Lze využít samostatnou bezplatnou API kvótu.
+
+Přihlašovací údaje jsou uložené šifrovaně pro každého uživatele. Do AI odchází OCR text, název sešitu a číslo stránky; originální obrázek zůstává u OCR služby.
 
 ## GitHub Actions → Docker Hub
 

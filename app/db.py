@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS imports (
   target_path TEXT,
   image_path TEXT,
   raw_ocr TEXT,
+  ai_json TEXT,
   markdown TEXT,
   error TEXT,
   source_checksum TEXT,
@@ -93,6 +94,9 @@ class Database:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(connections)")}
             if "secret_blob" not in columns:
                 conn.execute("ALTER TABLE connections ADD COLUMN secret_blob TEXT")
+            import_columns = {row[1] for row in conn.execute("PRAGMA table_info(imports)")}
+            if "ai_json" not in import_columns:
+                conn.execute("ALTER TABLE imports ADD COLUMN ai_json TEXT")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -166,11 +170,11 @@ class Database:
                 stamp = item.get("updated_at", now())
                 cur = conn.execute(
                     """INSERT INTO imports(user_id,source_id,page_number,title,notebook,status,stage,progress,
-                    ocr_confidence,target_path,image_path,raw_ocr,markdown,error,source_checksum,protected,created_at,updated_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    ocr_confidence,target_path,image_path,raw_ocr,ai_json,markdown,error,source_checksum,protected,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (user_id, item["source_id"], item["page_number"], item["title"], item["notebook"], item["status"],
                      item["stage"], item["progress"], item.get("ocr_confidence"), item.get("target_path"), item.get("image_path"),
-                     item.get("raw_ocr"), item.get("markdown"), item.get("error"), item.get("source_checksum"),
+                     item.get("raw_ocr"), item.get("ai_json"), item.get("markdown"), item.get("error"), item.get("source_checksum"),
                      int(item.get("protected", False)), stamp, stamp),
                 )
                 for stage, status, message in item.get("events", []):
