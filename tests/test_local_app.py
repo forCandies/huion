@@ -66,6 +66,16 @@ class LocalPipelineTests(unittest.TestCase):
         self.assertEqual(pages[0].page_id, "98765432109876543210")
         self.assertEqual(pages[0].notebook_name, "Můj sešit")
 
+    def test_extensionless_icloud_archive_is_discovered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "Test-123456"
+            make_backup(archive)
+            sources = list(find_sources(root))
+            pages = read_backup(sources[0])
+        self.assertEqual(sources, [archive])
+        self.assertEqual(len(pages), 1)
+
     def test_live_icloud_notebook_is_discovered_and_parsed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

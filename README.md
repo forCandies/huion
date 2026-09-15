@@ -30,13 +30,13 @@ Označení zdroje je **Rukopis**; název výrobce se v poznámkách nepoužívá
 - Obsidian vault vytvořený v iCloud Drive,
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) přihlášený k účtu, jehož limity chceš používat.
 
-Ink2Vault automaticky nabídne živou datovou složku Huion Note:
+Ink2Vault automaticky nabídne veřejný iCloud kontejner Huion Note:
 
 ```text
-~/Library/Containers/com.huion.note/Data/Documents/newData
+~/Library/Mobile Documents/iCloud~com~huion~note/Documents
 ```
 
-Jako alternativní zdroj lze stále použít běžnou složku se zálohami `.huionnoteios` nebo `.zip`, například z Google Drive.
+Sešity v něm mohou být ZIP archivy bez přípony; Ink2Vault je rozpozná podle obsahu. Jako alternativní zdroj lze stále použít lokální data aplikace nebo běžnou složku se zálohami `.huionnoteios` či `.zip`.
 
 ## První spuštění
 

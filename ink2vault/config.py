@@ -50,5 +50,8 @@ def suggested_vault_root() -> Path:
 
 
 def suggested_source() -> Path:
+    icloud = Path.home() / "Library" / "Mobile Documents" / "iCloud~com~huion~note" / "Documents"
     live = Path.home() / "Library" / "Containers" / "com.huion.note" / "Data" / "Documents" / "newData"
+    if icloud.is_dir():
+        return icloud
     return live if live.is_dir() else Path.home() / "Library" / "CloudStorage"

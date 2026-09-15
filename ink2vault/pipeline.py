@@ -17,7 +17,6 @@ from .state import State
 
 
 LOG = logging.getLogger("ink2vault")
-SUPPORTED_SUFFIXES = (".zip", ".huionnoteios")
 
 
 def safe_name(value: str, fallback: str = "Poznámka") -> str:
@@ -33,7 +32,7 @@ def find_sources(source: Path) -> Iterable[Path]:
         found.add(source)
         yield source
     for path in sorted(source.rglob("*")):
-        if path.is_file() and path.name.lower().endswith(SUPPORTED_SUFFIXES) and zipfile.is_zipfile(str(path)):
+        if path.is_file() and zipfile.is_zipfile(str(path)):
             found.add(path)
             yield path
         elif path.is_file() and path.name == "describe" and path.parent not in found:
