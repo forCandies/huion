@@ -47,3 +47,8 @@ class Config:
 
 def suggested_vault_root() -> Path:
     return Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents"
+
+
+def suggested_source() -> Path:
+    live = Path.home() / "Library" / "Containers" / "com.huion.note" / "Data" / "Documents" / "newData"
+    return live if live.is_dir() else Path.home() / "Library" / "CloudStorage"

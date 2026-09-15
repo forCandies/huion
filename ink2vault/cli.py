@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .ai import claude_version
-from .config import APP_SUPPORT, CONFIG_PATH, LOG_PATH, PLIST_PATH, STATE_PATH, Config, suggested_vault_root
+from .config import APP_SUPPORT, CONFIG_PATH, LOG_PATH, PLIST_PATH, STATE_PATH, Config, suggested_source, suggested_vault_root
 from .pipeline import Pipeline
 from .state import State
 
@@ -43,7 +43,7 @@ def cmd_configure(args: argparse.Namespace) -> int:
     previous = None
     if CONFIG_PATH.exists():
         previous = Config.load()
-    source_default = args.source or (previous.source_dir if previous else str(Path.home() / "Library" / "CloudStorage"))
+    source_default = args.source or (previous.source_dir if previous else str(suggested_source()))
     vault_root = suggested_vault_root()
     vault_default = args.vault or (previous.vault_dir if previous else str(vault_root))
     source = source_default if args.non_interactive else ask("Složka se zálohami", source_default)

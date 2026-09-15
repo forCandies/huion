@@ -1,10 +1,10 @@
 # Ink2Vault
 
-Ink2Vault je malá lokální aplikace pro macOS. Sleduje složku se zálohami ručně psaných poznámek, každou novou stránku nechá přečíst Claudem a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
+Ink2Vault je malá lokální aplikace pro macOS. Čte sešity synchronizované aplikací Huion Note přes iCloud, každou novou stránku nechá přečíst Claudem a uloží ji jako samostatnou Markdown poznámku do běžného Obsidian vaultu v iCloud Drive.
 
 ```text
-Google Drive pro počítač → lokální složka se zálohami → Ink2Vault + Claude
-                                                        ↓
+Huion Note na iPhonu/iPadu → iCloud → Huion Note na Macu → Ink2Vault + Claude
+                                                               ↓
 iPhone / iPad / Mac ← iCloud Drive ← Obsidian vault ← Markdown + originální obrázek
 ```
 
@@ -26,11 +26,17 @@ Označení zdroje je **Rukopis**; název výrobce se v poznámkách nepoužívá
 ## Předpoklady
 
 - macOS s Pythonem 3.9 nebo novějším,
-- [Google Drive pro počítač](https://support.google.com/drive/answer/10838124) a lokálně dostupná složka se zálohami,
+- Huion Note nainstalovaný na Apple Silicon Macu se zapnutou iCloud synchronizací,
 - Obsidian vault vytvořený v iCloud Drive,
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) přihlášený k účtu, jehož limity chceš používat.
 
-Zdrojová složka může být i jiná běžná lokální složka. Ink2Vault hledá rekurzivně soubory `.huionnoteios` a `.zip`.
+Ink2Vault automaticky nabídne živou datovou složku Huion Note:
+
+```text
+~/Library/Containers/com.huion.note/Data/Documents/newData
+```
+
+Jako alternativní zdroj lze stále použít běžnou složku se zálohami `.huionnoteios` nebo `.zip`, například z Google Drive.
 
 ## První spuštění
 
@@ -45,7 +51,7 @@ claude auth login
 
 `configure` se zeptá na:
 
-1. lokální složku se zálohami,
+1. lokální složku se synchronizovanými sešity Huion Note,
 2. konkrétní Obsidian vault v iCloud Drive,
 3. cílovou složku poznámek uvnitř vaultu,
 4. cílovou složku originálních obrázků.
@@ -56,13 +62,7 @@ Typická cesta k vaultu v iCloudu vypadá takto:
 ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/MujVault
 ```
 
-Google Drive bývá připojený pod:
-
-```text
-~/Library/CloudStorage/GoogleDrive-.../
-```
-
-Pokud macOS vyžádá přístup k iCloudu nebo Google Drive, povol ho Terminálu a později i procesu běžícímu na pozadí.
+Pokud macOS vyžádá přístup k datům jiné aplikace nebo k iCloudu, povol ho Terminálu a později i procesu běžícímu na pozadí.
 
 ## Automatický provoz
 
@@ -101,7 +101,7 @@ Stav aplikace je v `~/Library/Application Support/Ink2Vault/`. Přihlašovací �
 
 Na všech zařízeních otevři v Obsidianu tentýž vault uložený v iCloudu. iCloud synchronizuje Markdown soubory i obrázky. Poznámky lze po importu normálně měnit; lokální evidence importů brání Ink2Vaultu v jejich přepsání.
 
-Pro spolehlivé zpracování musí Mac běžet, být přihlášený, mít staženou vstupní složku z Google Drive a dostupný iCloud vault. Samotné čtení a úpravy v Obsidianu na mobilních zařízeních na běhu Macu nezávisí.
+Pro spolehlivé zpracování musí Mac běžet, být přihlášený, mít v Huion Note dokončenou iCloud synchronizaci a dostupný iCloud vault. Samotné čtení a úpravy v Obsidianu na mobilních zařízeních na běhu Macu nezávisí.
 
 ## Vývoj a kontrola
 

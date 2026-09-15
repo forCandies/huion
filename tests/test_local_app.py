@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from ink2vault.ai import AIResult, process_image
 from ink2vault.config import Config
-from ink2vault.huion import Page, read_backup
-from ink2vault.pipeline import Pipeline, markdown
+from ink2vault.huion import Page, read_backup, read_notebook
+from ink2vault.pipeline import Pipeline, find_sources, markdown
 from ink2vault.state import State
 
 
@@ -24,6 +24,19 @@ def make_backup(path: Path, image: bytes = JPEG) -> None:
     with zipfile.ZipFile(str(path), "w") as archive:
         archive.writestr("book/describe", json.dumps(meta))
         archive.writestr("book/pages/p1/clip.jpg", image)
+
+
+def make_live_notebook(path: Path, image: bytes = JPEG) -> None:
+    path.mkdir(parents=True)
+    meta = {
+        "identify": 12345678901234567890,
+        "name": "Živý sešit",
+        "canvasArr": [{"identify": 98765432109876543210, "subPath": "pages/p1"}],
+    }
+    (path / "describe").write_text(json.dumps(meta), encoding="utf-8")
+    page = path / "pages/p1"
+    page.mkdir(parents=True)
+    (page / "clip.jpg").write_bytes(image)
 
 
 class LocalPipelineTests(unittest.TestCase):
@@ -52,6 +65,17 @@ class LocalPipelineTests(unittest.TestCase):
             pages = read_backup(path)
         self.assertEqual(pages[0].page_id, "98765432109876543210")
         self.assertEqual(pages[0].notebook_name, "Můj sešit")
+
+    def test_live_icloud_notebook_is_discovered_and_parsed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            notebook = root / "newData" / "book-id"
+            make_live_notebook(notebook)
+            sources = list(find_sources(root / "newData"))
+            pages = read_notebook(sources[0])
+        self.assertEqual(sources, [notebook])
+        self.assertEqual(pages[0].page_id, "98765432109876543210")
+        self.assertEqual(pages[0].notebook_name, "Živý sešit")
 
     def test_ai_result_normalizes_tasks_and_tags(self):
         result = AIResult.from_dict({

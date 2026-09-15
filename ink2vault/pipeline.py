@@ -12,7 +12,7 @@ from typing import Iterable
 
 from .ai import AIResult, process_image
 from .config import Config
-from .huion import Page, read_backup
+from .huion import Page, read_source
 from .state import State
 
 
@@ -25,12 +25,20 @@ def safe_name(value: str, fallback: str = "Poznámka") -> str:
     return re.sub(r"\s+", " ", value)[:120] or fallback
 
 
-def find_backups(source: Path) -> Iterable[Path]:
+def find_sources(source: Path) -> Iterable[Path]:
     if not source.exists():
         raise RuntimeError("Vstupní složka neexistuje: %s" % source)
+    found = set()
+    if source.is_dir() and (source / "describe").is_file():
+        found.add(source)
+        yield source
     for path in sorted(source.rglob("*")):
         if path.is_file() and path.name.lower().endswith(SUPPORTED_SUFFIXES) and zipfile.is_zipfile(str(path)):
+            found.add(path)
             yield path
+        elif path.is_file() and path.name == "describe" and path.parent not in found:
+            found.add(path.parent)
+            yield path.parent
 
 
 def markdown(label: str, page: Page, result: AIResult, attachment: str, source_id: str) -> str:
@@ -92,9 +100,9 @@ class Pipeline:
         if not self.config.vault.exists():
             raise RuntimeError("Obsidian vault neexistuje nebo není stažený z iCloudu: %s" % self.config.vault)
         processed = 0
-        for backup in find_backups(self.config.source):
+        for backup in find_sources(self.config.source):
             try:
-                pages = read_backup(backup)
+                pages = read_source(backup)
             except Exception as exc:
                 LOG.error("Nelze přečíst %s: %s", backup.name, exc)
                 continue
