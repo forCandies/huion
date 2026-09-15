@@ -40,13 +40,40 @@ Sešity v něm mohou být ZIP archivy bez přípony; Ink2Vault je rozpozná podl
 
 ## První spuštění
 
-V adresáři projektu spusť:
+### Instalace na nový Mac
+
+Rozbal distribuční ZIP, otevři jeho složku v Terminálu a spusť:
+
+```bash
+./install.sh
+```
+
+Instalátor nepotřebuje `sudo`, nic nestahuje a nepřidává externí Python balíčky. Program uloží do:
+
+```text
+~/Library/Application Support/Ink2Vault/runtime
+```
+
+Příkaz vytvoří jako `~/.local/bin/ink2vault`. Pokud `~/.local/bin` ještě není v `PATH`, přidej do `~/.zprofile`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Na novém Macu musí být nainstalovaný také Claude Code. Aktuální oficiální postup je v [dokumentaci Anthropic](https://docs.anthropic.com/en/docs/claude-code/getting-started). Potom se přihlas účtem Claude Pro/Max:
 
 ```bash
 claude auth login
-./bin/ink2vault configure
-./bin/ink2vault doctor
-./bin/ink2vault scan
+```
+
+### Konfigurace
+
+Po instalaci spusť:
+
+```bash
+ink2vault configure
+ink2vault doctor
+ink2vault scan
 ```
 
 `configure` se zeptá na:
@@ -69,21 +96,21 @@ Pokud macOS vyžádá přístup k datům jiné aplikace nebo k iCloudu, povol ho
 Po úspěšném ručním skenu nainstaluj uživatelskou službu macOS:
 
 ```bash
-./bin/ink2vault service install
+ink2vault service install
 ```
 
 Služba se spustí po přihlášení a ve výchozím nastavení kontroluje nové zálohy každou minutu. Správa služby:
 
 ```bash
-./bin/ink2vault service status
-./bin/ink2vault service uninstall
+ink2vault service status
+ink2vault service uninstall
 ```
 
 Stav importů a poslední chyby:
 
 ```bash
-./bin/ink2vault status
-./bin/ink2vault scan --retry-now
+ink2vault status
+ink2vault scan --retry-now
 tail -f "$HOME/Library/Application Support/Ink2Vault/ink2vault.log"
 ```
 

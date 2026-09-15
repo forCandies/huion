@@ -141,8 +141,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def launcher_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "bin" / "ink2vault"
+def module_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def cmd_service(args: argparse.Namespace) -> int:
@@ -165,19 +165,23 @@ def cmd_service(args: argparse.Namespace) -> int:
         raise RuntimeError("Claude účet není přihlášený. Nejdřív spusť: claude auth login")
     PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     APP_SUPPORT.mkdir(parents=True, exist_ok=True)
+    python_path = os.pathsep.join(filter(None, [str(module_root()), os.environ.get("PYTHONPATH", "")]))
     payload = {
         "Label": label,
-        "ProgramArguments": [str(launcher_path()), "watch"],
-        "WorkingDirectory": str(launcher_path().parent),
+        "ProgramArguments": [sys.executable, "-m", "ink2vault.cli", "watch"],
+        "WorkingDirectory": str(module_root()),
         "RunAtLoad": True,
         "KeepAlive": True,
         "StandardOutPath": "/dev/null",
         "StandardErrorPath": "/dev/null",
         "ProcessType": "Background",
-        "EnvironmentVariables": {"PATH": os.pathsep.join(filter(None, [
-            str(Path(shutil.which("claude")).parent) if shutil.which("claude") else "",
-            os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
-        ]))},
+        "EnvironmentVariables": {
+            "PATH": os.pathsep.join(filter(None, [
+                str(Path(shutil.which("claude")).parent) if shutil.which("claude") else "",
+                os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+            ])),
+            "PYTHONPATH": python_path,
+        },
     }
     with PLIST_PATH.open("wb") as handle:
         plistlib.dump(payload, handle)

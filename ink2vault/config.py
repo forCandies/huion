@@ -28,7 +28,7 @@ class Config:
     @classmethod
     def load(cls) -> "Config":
         if not CONFIG_PATH.exists():
-            raise RuntimeError("Konfigurace neexistuje. Nejdřív spusť: ./bin/ink2vault configure")
+            raise RuntimeError("Konfigurace neexistuje. Nejdřív spusť: ink2vault configure")
         return cls(**json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
 
     def save(self) -> None:
