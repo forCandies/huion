@@ -1,7 +1,0 @@
-services:
-  app:
-    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME}/ink2vault:latest
-    build: !reset null
-  ocr:
-    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME}/ink2vault:ocr-latest
-    build: !reset null

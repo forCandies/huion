@@ -5,6 +5,7 @@ import json
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import List
 
 
 @dataclass(frozen=True)
@@ -23,16 +24,16 @@ def _ext(data: bytes) -> str:
         return ".png"
     if data.startswith(b"\xff\xd8\xff"):
         return ".jpg"
-    return ".img"
+    raise ValueError("Stránka není podporovaný PNG nebo JPEG obrázek")
 
 
-def read_backup(path: Path) -> list[Page]:
+def read_backup(path: Path) -> List[Page]:
     """Read the iOS .huionnoteios ZIP format without rounding numeric IDs."""
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         descriptors = [name for name in names if PurePosixPath(name).name == "describe"]
         if len(descriptors) != 1:
-            raise ValueError(f"Expected one describe file, found {len(descriptors)}")
+            raise ValueError("Očekáván jeden soubor describe, nalezeno: %s" % len(descriptors))
         descriptor = descriptors[0]
         root = str(PurePosixPath(descriptor).parent)
         meta = json.loads(archive.read(descriptor), parse_float=str, parse_int=str)
@@ -41,15 +42,19 @@ def read_backup(path: Path) -> list[Page]:
         pages = []
         for number, item in enumerate(meta.get("canvasArr") or [], 1):
             page_id = str(item.get("identify") or number)
-            page_root = f"{root}/{item.get('subPath', f'pages/{page_id}')}"
-            clip = f"{page_root}/clip.jpg"
+            page_root = "%s/%s" % (root, item.get("subPath", "pages/%s" % page_id))
+            clip = "%s/clip.jpg" % page_root
             if clip in names:
                 image = archive.read(clip)
             else:
-                content = json.loads(archive.read(f"{page_root}/content"), parse_float=str, parse_int=str)
+                content_name = "%s/content" % page_root
+                content = json.loads(archive.read(content_name), parse_float=str, parse_int=str)
                 images = content.get("images") or []
                 if not images:
-                    raise ValueError(f"Page {page_id} contains no image")
-                image = archive.read(f"{page_root}/{images[-1]['localPath']}")
-            pages.append(Page(notebook_id, notebook_name, page_id, number, image, _ext(image), hashlib.sha256(image).hexdigest()))
+                    raise ValueError("Stránka %s neobsahuje obrázek" % page_id)
+                image = archive.read("%s/%s" % (page_root, images[-1]["localPath"]))
+            pages.append(Page(
+                notebook_id, notebook_name, page_id, number, image, _ext(image),
+                hashlib.sha256(image).hexdigest(),
+            ))
         return pages
