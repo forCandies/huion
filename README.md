@@ -37,7 +37,9 @@ První sestavení trvá déle: image aplikace kompiluje připnutou verzi LiveSyn
 
 ## Produkční nasazení v Dockploy
 
-Při nasazení z tohoto repozitáře použij oba Compose soubory:
+Kompletní postup je v [DEPLOY.md](DEPLOY.md). Pro Dockploy použij připravený soubor `docker-compose.dockploy.yml`; očekává hotové image z Docker Hubu a nepotřebuje lokální `.env`.
+
+Pro ruční nasazení mimo Dockploy lze stále použít oba původní Compose soubory:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -48,6 +50,7 @@ Nastav `DOCKERHUB_USERNAME`; aplikace a OCR se pak stáhnou z:
 ```text
 <DOCKERHUB_USERNAME>/ink2vault:latest
 <DOCKERHUB_USERNAME>/ink2vault:ocr-latest
+<DOCKERHUB_USERNAME>/ink2vault:couchdb-latest
 ```
 
 CouchDB není veřejně vystavená v produkčním Compose override automaticky. V Dockploy jí nastav samostatnou HTTPS doménu, například `https://sync.example.cz`, a stejnou adresu vlož do `LIVESYNC_PUBLIC_URL`. Web aplikaci vystav například jako `https://ink.example.cz`.
@@ -103,7 +106,7 @@ Přihlašovací údaje jsou uložené šifrovaně pro každého uživatele. Do A
 
 ## GitHub Actions → Docker Hub
 
-`.github/workflows/docker-registry.yaml` se spustí při každém pushi do `main`. Bez release tagů rovnou přepíše `latest` a `ocr-latest` pro `linux/amd64` a `linux/arm64`.
+`.github/workflows/docker-registry.yaml` se spustí při každém pushi do `main`. Bez release tagů rovnou přepíše `latest`, `ocr-latest` a `couchdb-latest` pro `linux/amd64` a `linux/arm64`.
 
 V GitHub repozitáři nastav Actions secrets:
 

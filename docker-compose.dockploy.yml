@@ -1,0 +1,99 @@
+services:
+  app:
+    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME}/ink2vault:latest
+    environment:
+      APP_URL: ${APP_URL:?Set APP_URL}
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY}
+      APP_ENV: production
+      REGISTRATION_MODE: invite
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:?Set ALLOWED_EMAILS}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?Set GOOGLE_CLIENT_SECRET}
+      DATA_DIR: /data
+      COUCHDB_URL: http://couchdb:5984
+      COUCHDB_ADMIN_USER: ${COUCHDB_ADMIN_USER:?Set COUCHDB_ADMIN_USER}
+      COUCHDB_ADMIN_PASSWORD: ${COUCHDB_ADMIN_PASSWORD:?Set COUCHDB_ADMIN_PASSWORD}
+      LIVESYNC_PUBLIC_URL: ${LIVESYNC_PUBLIC_URL:?Set LIVESYNC_PUBLIC_URL}
+      OCR_URL: http://ocr:8000
+      OCR_DOMAIN: handwritten
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-sonnet}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-300}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "8000"
+    volumes:
+      - ink2vault-data:/data
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      ocr:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  couchdb:
+    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME}/ink2vault:couchdb-latest
+    environment:
+      COUCHDB_USER: ${COUCHDB_ADMIN_USER:?Set COUCHDB_ADMIN_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD:?Set COUCHDB_ADMIN_PASSWORD}
+    expose:
+      - "5984"
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u \"$$COUCHDB_USER:$$COUCHDB_PASSWORD\" http://127.0.0.1:5984/_up"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  ocr:
+    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME}/ink2vault:ocr-latest
+    environment:
+      TUZKAOCR_DEVICE: cpu
+      TUZKAOCR_PAGE_WORKERS: ${TUZKAOCR_PAGE_WORKERS:-1}
+      TUZKAOCR_LINE_WORKERS: ${TUZKAOCR_LINE_WORKERS:-2}
+      TUZKAOCR_OCR_THREADS: ${TUZKAOCR_OCR_THREADS:-2}
+      TUZKAOCR_CPU_MEM_ARENA: ${TUZKAOCR_CPU_MEM_ARENA:-false}
+      TUZKAOCR_MAX_QUEUE: 2
+      TUZKAOCR_SPOOL_DIR: /app/spool
+      TUZKAOCR_RESULTS_DIR: /app/results
+    expose:
+      - "8000"
+    volumes:
+      - ocr-results:/app/results
+      - ocr-spool:/app/spool
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2200M
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ink2vault-data:
+  couchdb-data:
+  ocr-results:
+  ocr-spool:
