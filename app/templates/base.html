@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Ink2Vault{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="{% if user %}shell{% else %}public{% endif %}">
+{% if user %}
+  <aside class="sidebar">
+    <a class="brand" href="/app"><span class="brand-mark">i2v</span><span>Ink2Vault</span></a>
+    <nav>
+      <a href="/app" class="{% if path == '/app' %}active{% endif %}"><span>⌂</span>Přehled</a>
+      <a href="/notes" class="{% if path.startswith('/notes') %}active{% endif %}"><span>▤</span>Poznámky</a>
+      <a href="/settings" class="{% if path == '/settings' %}active{% endif %}"><span>⚙</span>Nastavení</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="user-chip">
+        {% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="">{% else %}<span class="avatar">{{ user.name[:1] }}</span>{% endif %}
+        <div><strong>{{ user.name }}</strong><small>{{ user.email }}</small></div>
+      </div>
+      <form method="post" action="/auth/logout"><button class="text-button">Odhlásit se</button></form>
+    </div>
+  </aside>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+{% else %}
+  {% block public_content %}{% endblock %}
+{% endif %}
+<script src="/static/app.js"></script>
+</body>
+</html>
+

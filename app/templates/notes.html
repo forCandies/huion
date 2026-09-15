@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Poznámky · Ink2Vault{% endblock %}
+{% block content %}
+<header class="page-head compact"><div><p class="eyebrow dark">Historie importu</p><h1>Poznámky</h1><p>Všechno, co prošlo nebo právě prochází zpracováním.</p></div></header>
+<section class="panel">
+  <form class="filters" method="get">
+    <div class="filter-tabs">
+      {% for key,label in [('all','Vše'),('done','V Obsidianu'),('processing','Probíhá'),('review','Ke kontrole'),('error','Chyby')] %}
+      <button name="status" value="{{ key }}" class="{% if filter_status == key %}active{% endif %}">{{ label }}</button>
+      {% endfor %}
+    </div>
+    <label class="search"><span>⌕</span><input name="q" value="{{ query }}" placeholder="Hledat poznámku…"></label>
+  </form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Poznámka</th><th>Zdroj</th><th>Výsledek</th><th>Stav</th><th>Čas</th><th></th></tr></thead>
+    <tbody>{% for note in imports %}<tr>
+      <td><div class="table-note"><img src="{{ note.image_path if note.image_path.startswith('/static') else '/media/' ~ note.id }}" alt=""><strong>{{ note.title }}</strong></div></td>
+      <td>{{ note.notebook }}<small>Strana {{ note.page_number }}</small></td>
+      <td>{% if note.target_path %}<span class="path-chip">{{ note.target_path }}</span>{% else %}<span class="muted-text">Zatím nevytvořeno</span>{% endif %}</td>
+      <td><span class="note-status status-{{ note.status }}"><i></i>{{ {'done':'V Obsidianu','ready':'Čeká na LiveSync','processing':'Zpracovává se','review':'Ke kontrole','error':'Chyba','queued':'Ve frontě'}.get(note.status,note.status) }}</span></td>
+      <td>{{ note.updated_at[8:10] }}. {{ note.updated_at[5:7] }}. · {{ note.updated_at[11:16] }}</td>
+      <td><a class="row-link" href="/notes/{{ note.id }}">›</a></td>
+    </tr>{% else %}<tr><td colspan="6" class="empty">Žádné poznámky neodpovídají filtru.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

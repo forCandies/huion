@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Nastavení · Ink2Vault{% endblock %}
+{% block content %}
+<header class="page-head compact"><div><p class="eyebrow dark">Konfigurace</p><h1>Nastavení</h1><p>Připojení, umístění poznámek a pravidla automatizace.</p></div></header>
+{% if saved %}<div class="alert success">Nastavení bylo uloženo.</div>{% endif %}
+{% if connected %}<div class="alert success">Propojení {{ connected }} je připravené.</div>{% endif %}
+{% if error == 'google-not-configured' %}<div class="alert">Nejdřív nastav GOOGLE_CLIENT_ID a GOOGLE_CLIENT_SECRET.</div>{% endif %}
+{% if error == 'livesync-url' %}<div class="alert">Nejdřív nastav veřejnou HTTPS adresu LIVESYNC_PUBLIC_URL.</div>{% endif %}
+<div class="settings-layout">
+  <nav class="settings-nav"><a href="#connections">Propojení</a><a href="#destination">Cíl v Obsidianu</a><a href="#processing">Zpracování</a><a href="#access">Přístup</a></nav>
+  <div class="settings-content">
+    <section class="panel settings-section" id="connections"><div class="section-head"><div><h2>Propojení</h2><p>Služby zapojené do automatického toku.</p></div></div>
+      {% set items = [('drive','Google Drive','Čtení záloh ručně psaných stránek','G'),('ai','Lokální OCR','Přepis češtiny bez placeného API','Aa'),('sync','Obsidian LiveSync','CouchDB synchronizace zařízení','O')] %}
+      {% for key,title,desc,icon in items %}{% set c = connections.get(key) %}<div class="setting-connection"><span class="service-icon service-{{ key }}">{{ icon }}</span><div><strong>{{ title }}</strong><small>{{ desc }}</small>{% if c %}<em>{{ c.account_label }}</em>{% endif %}</div>{% if key == 'drive' %}<a class="secondary-button" href="/connections/drive/start">{{ 'Připojit vlastní Drive' if c and c.details.get('demo') else ('Připojit' if not c or c.status != 'connected' else 'Obnovit přístup') }}</a>{% elif key == 'sync' and (not c or c.status != 'connected') %}<form method="post" action="/connections/sync/provision"><button class="secondary-button" type="submit">Vytvořit vault sync</button></form>{% else %}<span class="connection-state">{{ 'Připraveno' if c and c.status == 'connected' else 'Volitelné' }}</span>{% endif %}</div>{% endfor %}
+      {% set drive = connections.get('drive') %}{% if drive and drive.status == 'connected' and not drive.details.get('demo') %}<form method="post" action="/connections/drive/folder" class="inline-config"><label><span>ID složky se zálohami na Google Drive</span><input name="folder_id" value="{{ drive.details.get('folder_id','root') }}"><small>Část adresy za <code>/folders/</code>; pro hlavní disk použij <code>root</code>.</small></label><button class="secondary-button" type="submit">Uložit složku</button></form>{% endif %}
+      {% if sync_credentials %}<div class="sync-credentials"><strong>Nastavení pro plugin Self-hosted LiveSync</strong><p>Tyto hodnoty vlož do pluginu na Macu, iPhonu i iPadu.</p><dl><dt>URI</dt><dd><code>{{ sync_credentials.public_url }}</code></dd><dt>Uživatel</dt><dd><code>{{ sync_credentials.username }}</code></dd><dt>Heslo</dt><dd><code>{{ sync_credentials.password }}</code></dd><dt>Databáze</dt><dd><code>{{ sync_credentials.database }}</code></dd><dt>E2E heslo</dt><dd><code>{{ sync_credentials.passphrase }}</code></dd></dl></div>{% endif %}
+    </section>
+    <form method="post" action="/settings/destination" class="panel settings-section" id="destination">
+      <div class="section-head"><div><h2>Cíl v Obsidianu</h2><p>Urči přesně, kde se objeví poznámky a přílohy.</p></div><span class="save-state">Ukládá se do osobního vaultu</span></div>
+      <div class="form-grid"><label><span>Složka poznámek</span><input name="note_folder" value="{{ profile.note_folder }}"><small>Relativní cesta uvnitř vaultu</small></label><label><span>Složka příloh</span><input name="attachment_folder" value="{{ profile.attachment_folder }}"><small>Obrázky původních stránek</small></label><label><span>Zobrazený název zdroje</span><input name="source_label" value="{{ profile.source_label }}" placeholder="Může zůstat prázdné"><small>Výrobce zařízení se nikde nezobrazuje</small></label><label><span>Šablona názvu souboru</span><input name="filename_template" value="{{ profile.filename_template }}"><small>Dostupné: {date}, {title}, {notebook}, {page}</small></label></div>
+      <div class="path-preview"><small>Ukázka výsledku</small><code>{{ profile.note_folder }}/2026-09-15 – Návrh synchronizace.md</code></div>
+      <div id="processing" class="embedded-processing"><div class="section-head"><div><h2>Zpracování</h2><p>Co se má stát po nalezení nové stránky.</p></div></div>
+        <div class="radio-cards"><label><input type="radio" name="processing_mode" value="automatic" {% if profile.processing_mode == 'automatic' %}checked{% endif %}><span><strong>Automaticky</strong><small>Výsledek rovnou odešle do vaultu.</small></span></label><label><input type="radio" name="processing_mode" value="review" {% if profile.processing_mode == 'review' %}checked{% endif %}><span><strong>Vždy schválit</strong><small>Každý výsledek nejdřív čeká ve frontě.</small></span></label></div>
+        <label class="toggle-row"><span><strong>Ukládat originální obrázek</strong><small>Vloží stránku do nastavené složky příloh.</small></span><input name="save_original" type="checkbox" {% if profile.save_original %}checked{% endif %}><i></i></label>
+      </div><div class="form-footer"><button class="primary-button" type="submit">Uložit změny</button></div>
+    </form>
+    <section class="panel settings-section" id="access"><div class="section-head"><div><h2>Přístup</h2><p>Registrace je řízená proměnnou prostředí.</p></div></div><div class="code-setting"><span>ALLOWED_EMAILS</span><code>{{ settings.allowed_emails|join(', ') }}</code></div><p class="hint">Seznam změň v Dockploy a znovu nasaď kontejner. Přihlášení jiného Google účtu bude odmítnuto.</p></section>
+  </div>
+</div>
+{% endblock %}

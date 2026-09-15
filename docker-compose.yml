@@ -1,0 +1,88 @@
+services:
+  app:
+    build: .
+    image: ink2vault:local
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      COUCHDB_URL: http://couchdb:5984
+    ports:
+      - "3000:8000"
+    volumes:
+      - ink2vault-data:/data
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      ocr:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  couchdb:
+    image: ink2vault-couchdb:local
+    build:
+      context: ./deploy
+      dockerfile: couchdb.Dockerfile
+    environment:
+      COUCHDB_USER: ${COUCHDB_ADMIN_USER:-ink2vault}
+      COUCHDB_PASSWORD: ${COUCHDB_ADMIN_PASSWORD:-change-this-couchdb-password}
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+    ports:
+      - "127.0.0.1:5984:5984"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u \"$$COUCHDB_USER:$$COUCHDB_PASSWORD\" http://127.0.0.1:5984/_up"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  ocr:
+    image: ${INK2VAULT_OCR_IMAGE:-ink2vault-ocr:local}
+    build:
+      context: https://github.com/moravianlibrary/TuzkaOCR.git#060effdb0de45b67df1a38d7db8fd562bedd8cb4
+      dockerfile: Dockerfile
+    environment:
+      TUZKAOCR_DEVICE: cpu
+      TUZKAOCR_PAGE_WORKERS: ${TUZKAOCR_PAGE_WORKERS:-1}
+      TUZKAOCR_LINE_WORKERS: ${TUZKAOCR_LINE_WORKERS:-2}
+      TUZKAOCR_OCR_THREADS: ${TUZKAOCR_OCR_THREADS:-2}
+      TUZKAOCR_CPU_MEM_ARENA: ${TUZKAOCR_CPU_MEM_ARENA:-false}
+      TUZKAOCR_MAX_QUEUE: 2
+      TUZKAOCR_SPOOL_DIR: /app/spool
+      TUZKAOCR_RESULTS_DIR: /app/results
+    volumes:
+      - ocr-results:/app/results
+      - ocr-spool:/app/spool
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2200M
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ink2vault-data:
+  couchdb-data:
+  ocr-results:
+  ocr-spool:

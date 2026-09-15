@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Přihlášení · Ink2Vault{% endblock %}
+{% block public_content %}
+<div class="login-page">
+  <section class="login-story">
+    <a class="brand brand-light" href="/"><span class="brand-mark">i2v</span><span>Ink2Vault</span></a>
+    <div class="story-copy">
+      <p class="eyebrow">Rukopis dovnitř. Myšlenky ven.</p>
+      <h1>Z papíru rovnou<br>do tvého vaultu.</h1>
+      <p>Automatický převod ručně psaných stránek na čisté, prohledávatelné poznámky v Obsidianu.</p>
+    </div>
+    <div class="flow-strip"><span>Google Drive</span><i>→</i><span>Lokální OCR</span><i>→</i><span>Obsidian</span></div>
+  </section>
+  <section class="login-panel">
+    <div class="login-box">
+      <div class="mobile-brand"><span class="brand-mark">i2v</span> Ink2Vault</div>
+      <h2>Vítej zpátky</h2>
+      <p>Přihlas se účtem, který správce povolil pro tuto instalaci.</p>
+      {% if request.query_params.get('error') %}<div class="alert error">Google OAuth zatím není nastavený v souboru <code>.env</code>.</div>{% endif %}
+      <a class="google-button {% if not google_ready %}muted{% endif %}" href="/auth/google">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.06H12v3.9h5.38a4.6 4.6 0 0 1-2 3.02v2.53h3.24c1.9-1.75 2.98-4.33 2.98-7.39Z"/><path fill="#34a853" d="M12 22c2.7 0 4.97-.9 6.62-2.42l-3.24-2.52c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.6A10 10 0 0 0 12 22Z"/><path fill="#fbbc05" d="M6.4 13.89A6 6 0 0 1 6.08 12c0-.66.11-1.3.32-1.89v-2.6H3.06A10 10 0 0 0 2 12c0 1.61.39 3.14 1.06 4.49l3.34-2.6Z"/><path fill="#ea4335" d="M12 5.98c1.47 0 2.8.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.94 5.51l3.34 2.6c.79-2.37 3-4.13 5.6-4.13Z"/></svg>
+        Pokračovat přes Google
+      </a>
+      {% if settings.development %}
+      <div class="divider"><span>lokální náhled</span></div>
+      <form method="post" action="/auth/demo"><button class="demo-button">Otevřít ukázkový účet</button></form>
+      <p class="dev-note">Vývojový vstup zmizí při <code>APP_ENV=production</code>.</p>
+      {% endif %}
+      <p class="login-foot">Přístup mají pouze adresy uvedené v <code>ALLOWED_EMAILS</code>.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}
